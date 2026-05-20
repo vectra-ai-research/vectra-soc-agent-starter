@@ -1,0 +1,75 @@
+id: c2_beacon_report
+name: C2 beacon indicators
+description: >-
+  Summarizes beacon-like network.beacon._all events in a time window with a detail table.
+category: Network
+version: "1.0"
+parameters:
+  - name: hours
+    type: int
+    description: Hours of history (1–168).
+    default: 24
+    required: false
+  - name: limit
+    type: int
+    description: Max beacon rows in the detail table.
+    default: 100
+    required: false
+data_sources:
+  - id: beacons
+    type: investigation_query
+    query: |
+      SELECT timestamp, id.orig_h AS orig_h, id.resp_h AS resp_h,
+             beacon_type, duration, session_count
+      FROM network.beacon._all
+      WHERE timestamp BETWEEN date_add('hour', -{{ hours | int }}, now()) AND now()
+      ORDER BY timestamp DESC
+      LIMIT {{ limit | int }}
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 1000
+sections:
+  - id: beacon_summary
+    title: Beacon activity
+    type: summary
+    data_source: beacons
+    metrics:
+      - label: Beacon rows
+        value_field: timestamp
+        aggregation: count
+        format: number
+      - label: Rows with originator IP
+        value_field: orig_h
+        aggregation: count
+        format: number
+  - id: beacon_detail
+    title: Recent beacon events
+    type: table
+    data_source: beacons
+    columns:
+      - field: timestamp
+        label: Time
+        format: timestamp
+      - field: orig_h
+        label: Orig IP
+        format: ip
+      - field: resp_h
+        label: Resp IP
+        format: ip
+      - field: beacon_type
+        label: Type
+        format: text
+      - field: duration
+        label: Duration (ms)
+        format: duration
+      - field: session_count
+        label: Sessions
+        format: number
+    row_limit: 100
+    empty_message: No beacon records in this window.
+output:
+  default_format: html
+  title_template: "{{ name }} ({{ hours }}h)"
+  include_metadata: true

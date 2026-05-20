@@ -1,0 +1,104 @@
+id: dns_error_rate
+name: DNS Error Rate
+description: >-
+  Summarizes DNS resolution outcomes by response code (NoError, NXDomain,
+  ServFail, etc.) and identifies the top domains generating errors. Use to
+  detect DGA activity, C2 beaconing, misconfigured clients, and DNS
+  infrastructure issues.
+category: Network
+version: "1.0"
+parameters:
+  - name: days
+    type: int
+    description: Days of history (1–14).
+    default: 7
+    required: false
+data_sources:
+  - id: rcode_ds
+    type: investigation_query
+    query: |
+      SELECT
+        COALESCE(rcode_name, 'Unknown') AS rcode_label,
+        COUNT(*) AS query_count
+      FROM network.dns._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+      GROUP BY 1
+      ORDER BY query_count DESC
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 50
+
+  - id: error_ds
+    type: investigation_query
+    query: |
+      SELECT
+        query AS domain,
+        COALESCE(rcode_name, 'Unknown') AS rcode_label,
+        COUNT(*) AS error_count,
+        COUNT(DISTINCT id.orig_h) AS unique_resolvers
+      FROM network.dns._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND rcode_name != 'NoError'
+        AND rcode_name IS NOT NULL
+        AND query IS NOT NULL
+      GROUP BY 1, 2
+      ORDER BY error_count DESC
+      LIMIT 50
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 100
+
+sections:
+  - id: overview
+    title: Overview
+    type: summary
+    data_source: rcode_ds
+    metrics:
+      - label: Total DNS Queries
+        value_field: query_count
+        aggregation: sum
+        format: number
+      - label: Response Codes Seen
+        value_field: rcode_label
+        aggregation: count
+        format: number
+
+  - id: rcode_pie
+    title: Queries by Response Code
+    type: chart
+    chart_type: pie
+    data_source: rcode_ds
+    label_field: rcode_label
+    value_field: query_count
+    empty_message: No DNS query data in this window.
+
+  - id: error_table
+    title: Top Error-Generating Domains
+    type: table
+    data_source: error_ds
+    columns:
+      - field: domain
+        label: Domain
+        format: text
+      - field: rcode_label
+        label: Response Code
+        format: text
+      - field: error_count
+        label: Error Count
+        format: number
+      - field: unique_resolvers
+        label: Unique Resolvers
+        format: number
+    row_limit: 50
+    empty_message: No DNS error data in this window.
+
+output:
+  default_format: html
+  title_template: "{{ name }} — last {{ days }}d"
+  include_metadata: true

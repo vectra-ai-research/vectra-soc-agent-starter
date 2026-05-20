@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ report_title }}</title>
+<style>
+  :root {
+    --bg-page: #f8f9fa;
+    --bg-header: #1a2332;
+    --bg-card: #ffffff;
+    --bg-table-head: #2d3748;
+    --bg-table-alt: #f1f5f9;
+    --bg-table-hover: #e8eef6;
+    --text-primary: #1a202c;
+    --text-secondary: #4a5568;
+    --text-header: #ffffff;
+    --text-mono: #2d3748;
+    --text-muted: #718096;
+    --accent-primary: #3182ce;
+    --accent-success: #38a169;
+    --accent-warning: #d69e2e;
+    --accent-danger: #e53e3e;
+    --accent-border: #e2e8f0;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg-page);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  table { border-spacing: 0; width: 100%; border-collapse: collapse; }
+  th, td { margin: 0; }
+</style>
+</head>
+<body>
+<header style="
+    background: var(--bg-header);
+    color: var(--text-header);
+    padding: 20px 32px;
+    border-bottom: 3px solid var(--accent-primary);
+">
+    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+                color: #90cdf4; margin-bottom: 6px;">
+        Vectra AI · Security Report
+    </div>
+    <h1 style="margin: 0; font-size: 22px; font-weight: 600;
+               font-family: var(--font-sans);">
+        {{ report_title }}
+    </h1>
+    <div style="font-size: 12px; color: #a0aec0; margin-top: 6px;">
+        Generated {{ generated_at }} · {{ report_category }}
+    </div>
+</header>
+{{ section_html | safe }}
+{{ footer_html | safe }}
+</body>
+</html>

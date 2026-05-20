@@ -1,0 +1,126 @@
+id: tls_session_duration
+name: TLS Session Duration
+description: >-
+  Analyzes the duration of TLS-identified network sessions from Vectra's
+  session telemetry. Buckets sessions by duration range and ranks the top
+  TLS-speaking servers by session count and average duration.
+
+  Note: This measures full session duration from Vectra's session records
+  (equivalent to Zeek conn.log duration), not TLS handshake time specifically.
+  Very long sessions may indicate persistent C2 channels or legitimate
+  long-lived application connections; very short sessions can indicate scanning.
+category: Network
+version: "1.0"
+parameters:
+  - name: days
+    type: int
+    description: Days of history (1–14).
+    default: 7
+    required: false
+data_sources:
+  - id: bucket_ds
+    type: investigation_query
+    query: |
+      SELECT
+        CASE
+          WHEN duration < 1 THEN 'Under 1s'
+          WHEN duration < 10 THEN '1 – 10s'
+          WHEN duration < 60 THEN '10 – 60s'
+          WHEN duration < 300 THEN '1 – 5 min'
+          WHEN duration < 3600 THEN '5 – 60 min'
+          ELSE 'Over 1 hour'
+        END AS duration_bucket,
+        COUNT(*) AS session_count
+      FROM network.isession._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND service = 'tls'
+        AND duration IS NOT NULL
+        AND duration >= 0
+      GROUP BY 1
+      ORDER BY session_count DESC
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 20
+
+  - id: server_ds
+    type: investigation_query
+    query: |
+      SELECT
+        id.resp_h AS server_ip,
+        COALESCE(resp_hostname.name, id.resp_h) AS server_label,
+        COUNT(*) AS session_count,
+        AVG(duration) AS avg_duration_sec,
+        MAX(duration) AS max_duration_sec,
+        COUNT(DISTINCT id.orig_h) AS unique_clients
+      FROM network.isession._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND service = 'tls'
+        AND duration IS NOT NULL
+        AND duration >= 0
+      GROUP BY id.resp_h, resp_hostname.name
+      ORDER BY session_count DESC
+      LIMIT 50
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 100
+
+sections:
+  - id: overview
+    title: Overview
+    type: summary
+    data_source: bucket_ds
+    metrics:
+      - label: Total TLS Sessions
+        value_field: session_count
+        aggregation: sum
+        format: number
+      - label: Duration Buckets
+        value_field: duration_bucket
+        aggregation: count
+        format: number
+
+  - id: bucket_pie
+    title: Sessions by Duration Range
+    type: chart
+    chart_type: pie
+    data_source: bucket_ds
+    label_field: duration_bucket
+    value_field: session_count
+    empty_message: No TLS session data in this window.
+
+  - id: server_table
+    title: Top TLS Servers by Session Count
+    type: table
+    data_source: server_ds
+    columns:
+      - field: server_ip
+        label: Server IP
+        format: ip
+      - field: server_label
+        label: Server
+        format: text
+      - field: session_count
+        label: Sessions
+        format: number
+      - field: avg_duration_sec
+        label: Avg Duration (s)
+        format: number
+      - field: max_duration_sec
+        label: Max Duration (s)
+        format: number
+      - field: unique_clients
+        label: Unique Clients
+        format: number
+    row_limit: 50
+    empty_message: No TLS session data in this window.
+
+output:
+  default_format: html
+  title_template: "{{ name }} — last {{ days }}d"
+  include_metadata: true

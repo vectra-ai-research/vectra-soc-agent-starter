@@ -1,0 +1,44 @@
+<section style="
+    background: var(--bg-card);
+    border: 1px solid var(--accent-border);
+    border-radius: 6px;
+    margin: 16px 24px;
+    overflow: hidden;
+">
+    <div style="
+        padding: 12px 20px;
+        border-bottom: 1px solid var(--accent-border);
+        background: #f7fafc;
+    ">
+        <h2 style="margin: 0; font-size: 14px; font-weight: 600;
+                   color: var(--text-primary); font-family: var(--font-sans);">
+            {{ section_title }}
+        </h2>
+    </div>
+    <div style="padding: 20px 24px;">
+        <div style="display: flex; flex-wrap: wrap; gap: 28px; align-items: center; justify-content: center;">
+            <svg viewBox="0 0 200 200" width="200" height="200" role="img"
+                 aria-label="{{ section_title }} pie chart"
+                 style="flex-shrink: 0;">
+                {% for s in slices %}
+                <path d="{{ s.path_d | safe }}" fill="{{ s.color | e }}" stroke="#fff" stroke-width="1"></path>
+                {% endfor %}
+            </svg>
+            <div style="min-width: 200px; font-family: var(--font-sans); font-size: 13px;">
+                {% for s in slices %}
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <span style="
+                        display: inline-block; width: 12px; height: 12px; border-radius: 2px;
+                        background: {{ s.color }}; flex-shrink: 0;
+                    "></span>
+                    <div>
+                        <span style="font-weight: 600; color: var(--text-primary);">{{ s.label }}</span>
+                        <span style="color: var(--text-secondary);"> — {{ s.value_display }}</span>
+                        <span style="color: var(--text-muted); font-size: 12px;"> ({{ s.pct_label }})</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>

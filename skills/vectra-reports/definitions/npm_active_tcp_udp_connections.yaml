@@ -1,0 +1,70 @@
+id: npm_active_tcp_udp_connections
+name: NPM - Active TCP-UDP Connections
+description: >-
+  Counts TCP and UDP sessions from network.isession._all over a configurable day window,
+  grouped by protocol (proto_name). Includes an HTML pie chart (use output_format='html',
+  the default) plus summary and table; markdown adds a Mermaid pie when clients support it.
+category: Network
+version: "1.0"
+parameters:
+  - name: days
+    type: int
+    description: Days of history to include (1–90).
+    default: 14
+    required: false
+data_sources:
+  - id: tcp_udp_by_proto
+    type: investigation_query
+    query: |
+      SELECT
+          proto_name AS protocol,
+          COUNT(*) AS session_count
+      FROM network.isession._all
+      WHERE timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+          AND proto_name IN ('TCP', 'UDP')
+      GROUP BY proto_name
+      ORDER BY session_count DESC
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 50
+sections:
+  - id: overview
+    title: Overview
+    type: summary
+    data_source: tcp_udp_by_proto
+    metrics:
+      - label: Total sessions (TCP + UDP)
+        value_field: session_count
+        aggregation: sum
+        format: number
+      - label: Protocols reported
+        value_field: protocol
+        aggregation: count
+        format: number
+  - id: protocol_pie
+    title: Sessions by protocol (pie)
+    type: chart
+    chart_type: pie
+    data_source: tcp_udp_by_proto
+    label_field: protocol
+    value_field: session_count
+    empty_message: No TCP or UDP session data in the selected window.
+  - id: by_protocol
+    title: Sessions by protocol
+    type: table
+    data_source: tcp_udp_by_proto
+    columns:
+      - field: protocol
+        label: Protocol
+        format: text
+      - field: session_count
+        label: Session count
+        format: number
+    row_limit: 10
+    empty_message: No TCP or UDP session data in the selected window.
+output:
+  default_format: html
+  title_template: "{{ name }} — last {{ days }}d"
+  include_metadata: true

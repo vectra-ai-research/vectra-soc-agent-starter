@@ -1,0 +1,105 @@
+id: zone_segment_data_transfers
+name: Zone / Segment Data Transfers
+description: >-
+  Summarizes data transfers between network subnets (/24) for a configurable hour window.
+  Reveals which source segments are sending the most traffic to which destination segments,
+  visualized as a Sankey ribbon diagram to highlight cross-zone data movement.
+category: Network
+version: "1.0"
+parameters:
+  - name: hours
+    type: int
+    description: Hours of history (1–72).
+    default: 24
+    required: false
+data_sources:
+  - id: main_ds
+    type: investigation_query
+    query: |
+      SELECT
+        concat(regexp_extract(id.orig_h, '^\d+\.\d+\.\d+', 0), '.0/24') AS src_subnet,
+        concat(regexp_extract(id.resp_h, '^\d+\.\d+\.\d+', 0), '.0/24') AS dst_subnet,
+        COUNT(*) AS session_count,
+        SUM(orig_ip_bytes) AS bytes_sent,
+        SUM(resp_ip_bytes) AS bytes_received,
+        SUM(orig_ip_bytes + resp_ip_bytes) AS total_bytes,
+        COUNT(DISTINCT id.orig_h) AS src_host_count,
+        COUNT(DISTINCT id.resp_h) AS dst_host_count
+      FROM network.isession._all
+      WHERE dt > date_add('day', -1, now())
+        AND timestamp > date_add('hour', -{{ hours | int }}, now())
+        AND local_orig = true
+        AND local_resp = true
+      GROUP BY 1, 2
+      ORDER BY total_bytes DESC
+      LIMIT 200
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 500
+sections:
+  - id: overview
+    title: Overview
+    type: summary
+    data_source: main_ds
+    metrics:
+      - label: Total Bytes Transferred
+        value_field: total_bytes
+        aggregation: sum
+        format: bytes
+      - label: Total Sessions
+        value_field: session_count
+        aggregation: sum
+        format: number
+      - label: Subnet Pairs
+        value_field: src_subnet
+        aggregation: count
+        format: number
+
+  - id: flow_sankey
+    title: Data Flow by Zone / Segment
+    type: chart
+    chart_type: sankey
+    data_source: main_ds
+    label_field: src_subnet
+    dst_field: dst_subnet
+    value_field: total_bytes
+    empty_message: No internal-to-internal session data in this window.
+
+  - id: detail_table
+    title: Subnet Transfer Details
+    type: table
+    data_source: main_ds
+    columns:
+      - field: src_subnet
+        label: Source Subnet
+        format: text
+      - field: dst_subnet
+        label: Destination Subnet
+        format: text
+      - field: session_count
+        label: Sessions
+        format: number
+      - field: src_host_count
+        label: Src Hosts
+        format: number
+      - field: dst_host_count
+        label: Dst Hosts
+        format: number
+      - field: bytes_sent
+        label: Bytes Sent
+        format: bytes
+      - field: bytes_received
+        label: Bytes Received
+        format: bytes
+      - field: total_bytes
+        label: Total Bytes
+        format: bytes
+    row_limit: 100
+    empty_message: No internal-to-internal session data in this window.
+
+output:
+  default_format: html
+  title_template: "{{ name }} — last {{ hours }}h"
+  include_metadata: true

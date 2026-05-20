@@ -1,0 +1,96 @@
+id: top_listeners_by_ip
+name: Top Listeners (Receivers) by IP
+description: >-
+  Ranks internal hosts by inbound bytes received, with session counts and
+  unique source host counts. Use to identify high-value targets, data
+  aggregation points, and unexpected large-volume receivers.
+category: Network
+version: "1.0"
+parameters:
+  - name: days
+    type: int
+    description: Days of history (1–14).
+    default: 7
+    required: false
+data_sources:
+  - id: main_ds
+    type: investigation_query
+    query: |
+      SELECT
+        id.resp_h AS dst_ip,
+        COALESCE(resp_hostname.name, id.resp_h) AS dst_label,
+        resp_hostname.name AS dst_hostname,
+        COUNT(DISTINCT id.orig_h) AS src_host_count,
+        COUNT(*) AS session_count,
+        SUM(resp_ip_bytes) AS bytes_received,
+        SUM(orig_ip_bytes) AS bytes_sent
+      FROM network.isession._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND local_resp = true
+      GROUP BY id.resp_h, resp_hostname.name
+      ORDER BY bytes_received DESC
+      LIMIT 50
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 100
+sections:
+  - id: overview
+    title: Overview
+    type: summary
+    data_source: main_ds
+    metrics:
+      - label: Total Bytes Received
+        value_field: bytes_received
+        aggregation: sum
+        format: bytes
+      - label: Total Sessions
+        value_field: session_count
+        aggregation: sum
+        format: number
+      - label: Unique Listeners
+        value_field: dst_ip
+        aggregation: count
+        format: number
+
+  - id: distribution_pie
+    title: Distribution by Bytes Received
+    type: chart
+    chart_type: pie
+    data_source: main_ds
+    label_field: dst_label
+    value_field: bytes_received
+    empty_message: No inbound session data in this window.
+
+  - id: detail_table
+    title: Top Receivers
+    type: table
+    data_source: main_ds
+    columns:
+      - field: dst_ip
+        label: Destination IP
+        format: ip
+      - field: dst_hostname
+        label: Hostname
+        format: text
+      - field: src_host_count
+        label: Source Hosts
+        format: number
+      - field: session_count
+        label: Sessions
+        format: number
+      - field: bytes_received
+        label: Bytes Received
+        format: bytes
+      - field: bytes_sent
+        label: Bytes Sent
+        format: bytes
+    row_limit: 50
+    empty_message: No inbound session data in this window.
+
+output:
+  default_format: html
+  title_template: "{{ name }} — last {{ days }}d"
+  include_metadata: true

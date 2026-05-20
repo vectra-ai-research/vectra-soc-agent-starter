@@ -1,0 +1,154 @@
+{
+  "description": "tshark command examples for Vectra detection PCAP triage — ATT&CK-aligned hunting, credential / lateral-movement / C2 / exfil pivots, and recovery-driven validation.",
+  "commands": [
+    {
+      "purpose": "Validate tshark version/build before running filters",
+      "command": "tshark -v",
+      "notes": "Use first to interpret dissector and field behavior differences across versions"
+    },
+    {
+      "purpose": "Evidence hash before analysis",
+      "command": "sha256sum capture.pcap",
+      "notes": "Preserve chain-of-custody context. fetch-detection-pcap.sh prints this automatically when it decodes the MCP payload."
+    },
+    {
+      "purpose": "Check protocol hierarchy and capture sanity",
+      "command": "tshark -r capture.pcap -q -z io,phs",
+      "notes": "Quickly reveals protocol mix and helps pick the right investigation path."
+    },
+    {
+      "purpose": "Validate key DNS / SMB / HTTP / TLS fields",
+      "command": "tshark -G fields | grep -E \"(dns\\.qry\\.name|smb2\\.cmd|http\\.request\\.uri|tls\\.handshake)\"",
+      "notes": "Preflight check to avoid failed commands on missing dissectors or field names."
+    },
+    {
+      "purpose": "Validate identity protocol fields",
+      "command": "tshark -G fields | grep -E \"(kerberos\\.|ldap\\.|ntlmssp\\.|smb2\\.nt_status)\"",
+      "notes": "Confirms support for credential and lateral-movement pivots."
+    },
+    {
+      "purpose": "List TLS Client Hello packets",
+      "command": "tshark -r capture.pcap -Y \"tls.handshake.type == 1\"",
+      "notes": "Primary pivot for TLS client fingerprinting and beacon shape."
+    },
+    {
+      "purpose": "Export TLS tuple + SNI + ALPN + cipher fields",
+      "command": "tshark -r capture.pcap -Y \"tls.handshake.type == 1\" -T fields -E header=y -e frame.number -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -e tls.handshake.version -e tls.handshake.ciphersuite -e tls.handshake.extensions_server_name -e tls.handshake.extensions_alpn_str",
+      "notes": "Core TLS triage row — what host talks to what destination over which TLS variant, plus the SNI and ALPN."
+    },
+    {
+      "purpose": "JA3 fingerprint distribution",
+      "command": "tshark -r capture.pcap -Y \"tls.handshake.type == 1\" -T fields -e ip.src -e ip.dst -e tls.handshake.ja3 | sort | uniq -c | sort -rn",
+      "notes": "Always-available client TLS fingerprint. Useful for spotting non-browser clients."
+    },
+    {
+      "purpose": "Server certificate subjects",
+      "command": "tshark -r capture.pcap -Y \"tls.handshake.type == 11\" -T fields -e ip.src -e ip.dst -e x509ce.subject -e x509ce.subjectAltName_element",
+      "notes": "Surface CN / SAN values when the full handshake is captured."
+    },
+    {
+      "purpose": "Count TLS Client Hellos by source",
+      "command": "tshark -r capture.pcap -Y \"tls.handshake.type == 1\" -T fields -e ip.src | sort | uniq -c | sort -rn",
+      "notes": "Detect potential beaconing or staged C2 check-ins."
+    },
+    {
+      "purpose": "Summarize SYN-only activity for scan/beacon detection",
+      "command": "tshark -r capture.pcap -Y \"tcp.flags.syn == 1 and tcp.flags.ack == 0\" -T fields -e ip.src -e ip.dst -e tcp.dstport | sort | uniq -c | sort -rn",
+      "notes": "High repeat or high fan-out patterns can indicate reconnaissance or C2 retries."
+    },
+    {
+      "purpose": "Long-lived TCP conversations",
+      "command": "tshark -r capture.pcap -q -z conv,tcp",
+      "notes": "Helps surface persistent C2 channels worth pivoting from."
+    },
+    {
+      "purpose": "Extract DNS queries with core context",
+      "command": "tshark -r capture.pcap -Y \"dns.flags.response == 0\" -T fields -E header=y -e frame.time -e ip.src -e dns.qry.type -e dns.qry.name",
+      "notes": "Triage suspicious DNS behavior and identify pivots."
+    },
+    {
+      "purpose": "Detect long / high-entropy DNS query names",
+      "command": "tshark -r capture.pcap -Y \"dns.flags.response == 0 && dns.qry.name matches \\\"[A-Za-z0-9]{25,}\\\"\" -T fields -e frame.time -e ip.src -e dns.qry.name",
+      "notes": "Identify possible DNS tunneling patterns."
+    },
+    {
+      "purpose": "Pivot TXT DNS queries",
+      "command": "tshark -r capture.pcap -Y \"dns.flags.response == 0 && dns.qry.type == 16\" -T fields -e frame.time -e ip.src -e dns.qry.name",
+      "notes": "Useful for payload-bearing TXT abuse checks."
+    },
+    {
+      "purpose": "Inspect SMB command activity (with share/tree)",
+      "command": "tshark -r capture.pcap -Y \"smb2\" -T fields -E header=y -e frame.time -e ip.src -e ip.dst -e smb2.cmd -e smb2.tree -e smb2.share_name",
+      "notes": "Supports lateral movement triage. Watch for ADMIN$ / C$ / IPC$."
+    },
+    {
+      "purpose": "Detect SMB authentication / status failures",
+      "command": "tshark -r capture.pcap -Y \"smb2 && smb2.nt_status\" -T fields -e frame.time -e ip.src -e ip.dst -e smb2.nt_status",
+      "notes": "Identifies likely invalid-credential and brute-force behavior over SMB."
+    },
+    {
+      "purpose": "Fallback SMB pivot via port 445",
+      "command": "tshark -r capture.pcap -Y \"tcp.port==445\" -T fields -e ip.src -e ip.dst | sort | uniq -c | sort -rn",
+      "notes": "Use when SMB dissector fields are missing."
+    },
+    {
+      "purpose": "Baseline RDP transport activity",
+      "command": "tshark -r capture.pcap -Y \"tcp.port==3389\" -T fields -E header=y -e frame.time -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport",
+      "notes": "Supports RDP lateral-movement investigations."
+    },
+    {
+      "purpose": "Inspect Kerberos ticket activity",
+      "command": "tshark -r capture.pcap -Y \"kerberos.msg_type\" -T fields -e frame.time -e ip.src -e ip.dst -e kerberos.msg_type -e kerberos.CNameString -e kerberos.SNameString",
+      "notes": "Surfaces account/service targeting and ticket flow anomalies."
+    },
+    {
+      "purpose": "Count Kerberos error codes",
+      "command": "tshark -r capture.pcap -Y \"kerberos.error_code\" -T fields -e ip.src -e kerberos.error_code | sort | uniq -c | sort -rn",
+      "notes": "Spikes can indicate password spray / AS-REP roasting / service account misuse."
+    },
+    {
+      "purpose": "Inspect LDAP operations",
+      "command": "tshark -r capture.pcap -Y \"ldap\" -T fields -e frame.time -e ip.src -e ip.dst -e ldap.protocolOp",
+      "notes": "Highlights suspicious bind/search operations against directory services."
+    },
+    {
+      "purpose": "Inspect NTLM authentication",
+      "command": "tshark -r capture.pcap -Y \"ntlmssp\" -T fields -e frame.time -e ip.src -e ip.dst -e ntlmssp.auth.username -e ntlmssp.auth.domain -e ntlmssp.negotiate.callingworkstation -e ntlmssp.challenge.target_name",
+      "notes": "Surface account, source workstation, and target server for any NTLM exchange."
+    },
+    {
+      "purpose": "Baseline WinRM remote-management traffic",
+      "command": "tshark -r capture.pcap -Y \"tcp.port==5985 || tcp.port==5986\" -T fields -e frame.time -e ip.src -e ip.dst -e tcp.dstport",
+      "notes": "Supports hands-on-keyboard lateral-movement scoping."
+    },
+    {
+      "purpose": "Extract HTTP request metadata",
+      "command": "tshark -r capture.pcap -Y \"http.request.method\" -T fields -E header=y -e frame.time -e ip.src -e ip.dst -e http.host -e http.request.method -e http.request.uri -e http.user_agent",
+      "notes": "Captures request observables for web and exfil triage."
+    },
+    {
+      "purpose": "Find large HTTP POST requests",
+      "command": "tshark -r capture.pcap -Y \"http.request.method == \\\"POST\\\" && http.content_length > 500000\" -T fields -e frame.time -e ip.src -e ip.dst -e http.host -e http.request.uri -e http.content_length",
+      "notes": "Potential bulk upload / exfil behavior."
+    },
+    {
+      "purpose": "List top HTTP user agents",
+      "command": "tshark -r capture.pcap -Y \"http.user_agent\" -T fields -e http.user_agent | sort | uniq -c | sort -rn | head -50",
+      "notes": "Flags scripted tooling and unusual client signatures."
+    },
+    {
+      "purpose": "Surface HTTP requests with Authorization headers",
+      "command": "tshark -r capture.pcap -Y \"http.authorization || http.authbasic\" -T fields -e frame.time -e ip.src -e ip.dst -e http.host -e http.request.method -e http.request.uri -e http.user_agent",
+      "notes": "Capture credentialed HTTP — useful for staging endpoint, internal tool, or proxied auth review."
+    },
+    {
+      "purpose": "JSON output for downstream pipelines",
+      "command": "tshark -r capture.pcap -Y \"tls.handshake.type == 1\" -T json",
+      "notes": "Machine-readable output for jq / Python enrichment chains."
+    }
+  ],
+  "references": [
+    "https://www.wireshark.org/docs/man-pages/tshark.html",
+    "https://www.wireshark.org/docs/dfref/"
+  ]
+}

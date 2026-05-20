@@ -1,0 +1,196 @@
+id: remote_access_sessions
+name: Remote Access Sessions
+description: >-
+  Summarizes remote access activity inferred from key protocol ports: RDP (3389),
+  SSH (22), IPSec/IKE (500/4500), OpenVPN (1194), and WireGuard (51820).
+  Covers both external remote access proxied through gateways (e.g. Zscaler ZPA,
+  Citrix, jump hosts) and internal lateral movement using the same protocols.
+  Use to baseline normal remote access patterns and identify anomalous source
+  segments or unexpected protocol usage.
+category: Network
+version: "1.0"
+parameters:
+  - name: days
+    type: int
+    description: Days of history (1–14, max 14 due to API lookback limit).
+    default: 14
+    required: false
+data_sources:
+  - id: protocol_ds
+    type: investigation_query
+    query: |
+      SELECT
+        CASE
+          WHEN id.resp_p = 22 THEN 'SSH'
+          WHEN id.resp_p = 3389 THEN 'RDP'
+          WHEN id.resp_p IN (500, 4500) THEN 'IPSec/IKE'
+          WHEN id.resp_p = 1194 THEN 'OpenVPN'
+          WHEN id.resp_p = 51820 THEN 'WireGuard'
+          ELSE CONCAT(proto_name, '/', CAST(id.resp_p AS VARCHAR))
+        END AS protocol_label,
+        COUNT(DISTINCT CONCAT(id.orig_h, '-', id.resp_h)) AS unique_tunnels,
+        COUNT(*) AS total_sessions
+      FROM network.isession._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND (
+          (id.resp_p = 22 AND proto_name = 'TCP') OR
+          (id.resp_p = 3389 AND proto_name = 'TCP') OR
+          (id.resp_p IN (500, 4500) AND proto_name = 'UDP') OR
+          (id.resp_p = 1194) OR
+          (id.resp_p = 51820 AND proto_name = 'UDP')
+        )
+      GROUP BY 1
+      ORDER BY total_sessions DESC
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 50
+
+  - id: flow_ds
+    type: investigation_query
+    query: |
+      SELECT
+        concat(regexp_extract(id.orig_h, '^\d+\.\d+\.\d+', 0), '.0/24') AS src_subnet,
+        CASE
+          WHEN id.resp_p = 22 THEN 'SSH'
+          WHEN id.resp_p = 3389 THEN 'RDP'
+          WHEN id.resp_p IN (500, 4500) THEN 'IPSec/IKE'
+          WHEN id.resp_p = 1194 THEN 'OpenVPN'
+          WHEN id.resp_p = 51820 THEN 'WireGuard'
+          ELSE CONCAT(proto_name, '/', CAST(id.resp_p AS VARCHAR))
+        END AS protocol_label,
+        COUNT(*) AS session_count
+      FROM network.isession._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND (
+          (id.resp_p = 22 AND proto_name = 'TCP') OR
+          (id.resp_p = 3389 AND proto_name = 'TCP') OR
+          (id.resp_p IN (500, 4500) AND proto_name = 'UDP') OR
+          (id.resp_p = 1194) OR
+          (id.resp_p = 51820 AND proto_name = 'UDP')
+        )
+      GROUP BY 1, 2
+      ORDER BY session_count DESC
+      LIMIT 100
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 200
+
+  - id: detail_ds
+    type: investigation_query
+    query: |
+      SELECT
+        id.orig_h AS src_ip,
+        orig_hostname.name AS src_hostname,
+        id.resp_h AS dst_ip,
+        resp_hostname.name AS dst_hostname,
+        CASE
+          WHEN id.resp_p = 22 THEN 'SSH'
+          WHEN id.resp_p = 3389 THEN 'RDP'
+          WHEN id.resp_p IN (500, 4500) THEN 'IPSec/IKE'
+          WHEN id.resp_p = 1194 THEN 'OpenVPN'
+          WHEN id.resp_p = 51820 THEN 'WireGuard'
+          ELSE CONCAT(proto_name, '/', CAST(id.resp_p AS VARCHAR))
+        END AS protocol_label,
+        id.resp_p AS port,
+        COUNT(*) AS session_count,
+        SUM(orig_ip_bytes) AS bytes_sent,
+        SUM(resp_ip_bytes) AS bytes_received
+      FROM network.isession._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND (
+          (id.resp_p = 22 AND proto_name = 'TCP') OR
+          (id.resp_p = 3389 AND proto_name = 'TCP') OR
+          (id.resp_p IN (500, 4500) AND proto_name = 'UDP') OR
+          (id.resp_p = 1194) OR
+          (id.resp_p = 51820 AND proto_name = 'UDP')
+        )
+      GROUP BY id.orig_h, orig_hostname.name, id.resp_h, resp_hostname.name, id.resp_p, proto_name
+      ORDER BY session_count DESC
+      LIMIT 100
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 200
+
+sections:
+  - id: overview
+    title: Overview
+    type: summary
+    data_source: protocol_ds
+    metrics:
+      - label: Total Sessions
+        value_field: total_sessions
+        aggregation: sum
+        format: number
+      - label: Unique Connections
+        value_field: unique_tunnels
+        aggregation: sum
+        format: number
+      - label: Protocols Active
+        value_field: protocol_label
+        aggregation: count
+        format: number
+
+  - id: protocol_pie
+    title: Sessions by Protocol
+    type: chart
+    chart_type: pie
+    data_source: protocol_ds
+    label_field: protocol_label
+    value_field: total_sessions
+    empty_message: No remote access sessions detected in this window.
+
+  - id: flow_sankey
+    title: Source Segment → Protocol Flow
+    type: chart
+    chart_type: sankey
+    data_source: flow_ds
+    label_field: src_subnet
+    dst_field: protocol_label
+    value_field: session_count
+    empty_message: No remote access flow data in this window.
+
+  - id: connection_table
+    title: Top Remote Access Connections
+    type: table
+    data_source: detail_ds
+    columns:
+      - field: src_ip
+        label: Source IP
+        format: ip
+      - field: src_hostname
+        label: Source Host
+        format: text
+      - field: dst_ip
+        label: Destination IP
+        format: ip
+      - field: dst_hostname
+        label: Destination Host
+        format: text
+      - field: protocol_label
+        label: Protocol
+        format: text
+      - field: session_count
+        label: Sessions
+        format: number
+      - field: bytes_sent
+        label: Bytes Sent
+        format: bytes
+      - field: bytes_received
+        label: Bytes Received
+        format: bytes
+    row_limit: 100
+    empty_message: No remote access connections in this window.
+
+output:
+  default_format: html
+  title_template: "{{ name }} — last {{ days }}d"
+  include_metadata: true

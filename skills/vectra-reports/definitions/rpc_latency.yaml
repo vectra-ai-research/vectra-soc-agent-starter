@@ -1,0 +1,127 @@
+id: rpc_latency
+name: RPC / SMB Latency
+description: >-
+  Measures round-trip time (RTT) for DCE/RPC calls observed by Vectra, broken
+  down by endpoint and operation. DCE/RPC underpins SMB, Active Directory
+  replication (drsuapi), service control (svcctl), and many other Windows
+  protocols — elevated RTT can indicate network congestion, slow domain
+  controllers, or lateral movement activity.
+
+  RTT is the time from RPC request to response, measured in milliseconds by
+  the Vectra sensor.
+category: Network
+version: "1.0"
+parameters:
+  - name: days
+    type: int
+    description: Days of history (1–14).
+    default: 7
+    required: false
+data_sources:
+  - id: endpoint_ds
+    type: investigation_query
+    query: |
+      SELECT
+        endpoint,
+        COUNT(*) AS call_count,
+        AVG(rtt) AS avg_rtt_ms,
+        MIN(rtt) AS min_rtt_ms,
+        MAX(rtt) AS max_rtt_ms
+      FROM network.dce_rpc._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND rtt IS NOT NULL
+      GROUP BY endpoint
+      ORDER BY call_count DESC
+      LIMIT 30
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 50
+
+  - id: operation_ds
+    type: investigation_query
+    query: |
+      SELECT
+        endpoint,
+        operation,
+        COUNT(*) AS call_count,
+        AVG(rtt) AS avg_rtt_ms,
+        MIN(rtt) AS min_rtt_ms,
+        MAX(rtt) AS max_rtt_ms,
+        COUNT(DISTINCT id.orig_h) AS unique_callers,
+        COUNT(DISTINCT id.resp_h) AS unique_servers
+      FROM network.dce_rpc._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND rtt IS NOT NULL
+      GROUP BY endpoint, operation
+      ORDER BY avg_rtt_ms DESC
+      LIMIT 50
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 100
+
+sections:
+  - id: overview
+    title: Overview
+    type: summary
+    data_source: endpoint_ds
+    metrics:
+      - label: Total RPC Calls
+        value_field: call_count
+        aggregation: sum
+        format: number
+      - label: Endpoints Observed
+        value_field: endpoint
+        aggregation: count
+        format: number
+
+  - id: endpoint_pie
+    title: RPC Calls by Endpoint
+    type: chart
+    chart_type: pie
+    data_source: endpoint_ds
+    label_field: endpoint
+    value_field: call_count
+    empty_message: No DCE/RPC data with RTT measurements in this window.
+
+  - id: operation_table
+    title: Latency by Endpoint / Operation
+    type: table
+    data_source: operation_ds
+    columns:
+      - field: endpoint
+        label: Endpoint
+        format: text
+      - field: operation
+        label: Operation
+        format: text
+      - field: call_count
+        label: Calls
+        format: number
+      - field: avg_rtt_ms
+        label: Avg RTT (ms)
+        format: number
+      - field: min_rtt_ms
+        label: Min RTT (ms)
+        format: number
+      - field: max_rtt_ms
+        label: Max RTT (ms)
+        format: number
+      - field: unique_callers
+        label: Unique Callers
+        format: number
+      - field: unique_servers
+        label: Unique Servers
+        format: number
+    row_limit: 50
+    empty_message: No DCE/RPC data with RTT measurements in this window.
+
+output:
+  default_format: html
+  title_template: "{{ name }} — last {{ days }}d"
+  include_metadata: true

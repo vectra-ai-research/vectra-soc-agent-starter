@@ -1,0 +1,115 @@
+id: daily_threat_summary
+name: Daily threat summary
+description: >-
+  Summarizes recent network session volume and open detections for the last N hours.
+  Uses Investigation Query on network.isession._all and REST get_detections.
+category: Operations
+version: "1.0"
+parameters:
+  - name: hours
+    type: int
+    description: Hours of history to include (1–168).
+    default: 24
+    required: false
+  - name: page_size
+    type: int
+    description: Page size for REST detection listing.
+    default: 25
+    required: false
+data_sources:
+  - id: sessions_agg
+    type: investigation_query
+    query: |
+      SELECT COUNT(*) AS session_count
+      FROM network.isession._all
+      WHERE timestamp BETWEEN date_add('hour', -{{ hours | int }}, now()) AND now()
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 50
+  - id: top_talkers
+    type: investigation_query
+    query: |
+      SELECT id.orig_h AS orig_h, id.resp_h AS resp_h, COUNT(*) AS flows
+      FROM network.isession._all
+      WHERE timestamp BETWEEN date_add('hour', -{{ hours | int }}, now()) AND now()
+      GROUP BY id.orig_h, id.resp_h
+      ORDER BY flows DESC
+      LIMIT 50
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 50
+  - id: open_detections
+    type: vectra_rest
+    client_method: get_detections
+    parameters: {}
+    arguments:
+      page: "1"
+      page_size: "{{ page_size }}"
+sections:
+  - id: overview
+    title: Overview
+    type: summary
+    data_source: sessions_agg
+    metrics:
+      - label: Sessions (window)
+        value_field: session_count
+        aggregation: sum
+        format: number
+  - id: flows_kpi
+    title: Top flow pairs (rows)
+    type: summary
+    data_source: top_talkers
+    metrics:
+      - label: Flow pairs returned
+        value_field: flows
+        aggregation: count
+        format: number
+  - id: top_talkers_table
+    title: Top source / destination pairs
+    type: table
+    data_source: top_talkers
+    columns:
+      - field: orig_h
+        label: Originator IP
+        format: ip
+      - field: resp_h
+        label: Responder IP
+        format: ip
+      - field: flows
+        label: Flows
+        format: number
+    row_limit: 50
+    empty_message: No session data in the selected window.
+  - id: detections_table
+    title: Active detections (first page)
+    type: table
+    data_source: open_detections
+    columns:
+      - field: id
+        label: ID
+        format: number
+      - field: type
+        label: Type
+        format: text
+      - field: category
+        label: Category
+        format: text
+      - field: src_ip
+        label: Source IP
+        format: ip
+      - field: threat
+        label: Threat
+        format: number
+      - field: certainty
+        label: Certainty
+        format: number
+    row_limit: 50
+    empty_message: No active detections returned.
+output:
+  default_format: html
+  title_template: "{{ name }} — last {{ hours }}h"
+  include_metadata: true

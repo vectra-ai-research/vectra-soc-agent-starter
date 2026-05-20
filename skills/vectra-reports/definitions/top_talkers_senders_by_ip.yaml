@@ -1,0 +1,81 @@
+id: top_talkers_senders_by_ip
+name: Top Talkers (Senders) by IP
+description: >-
+  Summarizes top talkers (senders) by IP for a configurable day window.
+  Ranks internal hosts by bytes sent, with session counts and bytes received.
+category: Network
+version: "1.0"
+parameters:
+  - name: days
+    type: int
+    description: Days of history (1–90).
+    default: 7
+    required: false
+data_sources:
+  - id: main_ds
+    type: investigation_query
+    query: |
+      SELECT id.orig_h AS src_ip, orig_hostname.name AS hostname,
+             COUNT(*) AS session_count,
+             SUM(orig_ip_bytes) AS bytes_sent,
+             SUM(resp_ip_bytes) AS bytes_received
+      FROM network.isession._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND local_orig = true
+      GROUP BY id.orig_h, orig_hostname.name
+      ORDER BY bytes_sent DESC
+      LIMIT 50
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 500
+sections:
+  - id: overview
+    title: Overview
+    type: summary
+    data_source: main_ds
+    metrics:
+      - label: Total Bytes Sent
+        value_field: bytes_sent
+        aggregation: sum
+        format: bytes
+      - label: Total Sessions
+        value_field: session_count
+        aggregation: sum
+        format: number
+  - id: distribution_pie
+    title: Distribution by Bytes Sent
+    type: chart
+    chart_type: pie
+    data_source: main_ds
+    label_field: src_ip
+    value_field: bytes_sent
+    empty_message: No data in this window.
+  - id: detail_table
+    title: Top Senders
+    type: table
+    data_source: main_ds
+    columns:
+      - field: src_ip
+        label: Source IP
+        format: ip
+      - field: hostname
+        label: Hostname
+        format: text
+      - field: session_count
+        label: Sessions
+        format: number
+      - field: bytes_sent
+        label: Bytes Sent
+        format: bytes
+      - field: bytes_received
+        label: Bytes Received
+        format: bytes
+    row_limit: 50
+    empty_message: No data in this window.
+output:
+  default_format: html
+  title_template: "{{ name }} — last {{ days }}d"
+  include_metadata: true

@@ -1,0 +1,155 @@
+id: saas_reachability
+name: SaaS Reachability
+description: >-
+  Proxies SaaS application reachability by counting observed TLS sessions to
+  well-known SaaS service domains (Microsoft 365, Google Workspace, AWS,
+  GitHub, Zoom, Slack, Okta, Salesforce, Zscaler). Session presence indicates
+  the service was reachable; zero sessions may indicate outages, policy blocks,
+  or no usage in the window.
+
+  Uses SNI (Server Name Indication) from TLS handshakes captured by Vectra.
+  This is a directional count — not a true availability probe.
+category: Network
+version: "1.0"
+parameters:
+  - name: days
+    type: int
+    description: Days of history (1–14).
+    default: 7
+    required: false
+data_sources:
+  - id: category_ds
+    type: investigation_query
+    query: |
+      SELECT
+        CASE
+          WHEN REGEXP_LIKE(server_name, 'microsoft|msn\.com|office|live\.com|bing|azure|skype') THEN 'Microsoft 365 / Azure'
+          WHEN REGEXP_LIKE(server_name, 'amazonaws|aws\.amazon') THEN 'Amazon AWS'
+          WHEN REGEXP_LIKE(server_name, 'zscaler') THEN 'Zscaler'
+          WHEN REGEXP_LIKE(server_name, 'google|googleapis|gstatic|gmail') THEN 'Google'
+          WHEN REGEXP_LIKE(server_name, 'github') THEN 'GitHub'
+          WHEN REGEXP_LIKE(server_name, 'zoom\.us') THEN 'Zoom'
+          WHEN REGEXP_LIKE(server_name, 'slack\.com') THEN 'Slack'
+          WHEN REGEXP_LIKE(server_name, 'okta') THEN 'Okta'
+          WHEN REGEXP_LIKE(server_name, 'salesforce|force\.com') THEN 'Salesforce'
+          ELSE 'Other SaaS'
+        END AS saas_category,
+        COUNT(*) AS session_count,
+        COUNT(DISTINCT id.orig_h) AS unique_clients
+      FROM network.ssl._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND server_name IS NOT NULL
+        AND server_name != ''
+        AND REGEXP_LIKE(server_name, 'microsoft|msn\.com|office|live\.com|bing|azure|skype|amazonaws|aws\.amazon|zscaler|google|googleapis|gstatic|gmail|github|zoom\.us|slack\.com|okta|salesforce|force\.com')
+      GROUP BY 1
+      ORDER BY session_count DESC
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 50
+
+  - id: domain_ds
+    type: investigation_query
+    query: |
+      SELECT
+        CASE
+          WHEN REGEXP_LIKE(server_name, 'microsoft|msn\.com|office|live\.com|bing|azure|skype') THEN 'Microsoft 365 / Azure'
+          WHEN REGEXP_LIKE(server_name, 'amazonaws|aws\.amazon') THEN 'Amazon AWS'
+          WHEN REGEXP_LIKE(server_name, 'zscaler') THEN 'Zscaler'
+          WHEN REGEXP_LIKE(server_name, 'google|googleapis|gstatic|gmail') THEN 'Google'
+          WHEN REGEXP_LIKE(server_name, 'github') THEN 'GitHub'
+          WHEN REGEXP_LIKE(server_name, 'zoom\.us') THEN 'Zoom'
+          WHEN REGEXP_LIKE(server_name, 'slack\.com') THEN 'Slack'
+          WHEN REGEXP_LIKE(server_name, 'okta') THEN 'Okta'
+          WHEN REGEXP_LIKE(server_name, 'salesforce|force\.com') THEN 'Salesforce'
+          ELSE 'Other SaaS'
+        END AS saas_category,
+        server_name AS domain,
+        COUNT(*) AS session_count,
+        COUNT(DISTINCT id.orig_h) AS unique_clients
+      FROM network.ssl._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND server_name IS NOT NULL
+        AND server_name != ''
+        AND REGEXP_LIKE(server_name, 'microsoft|msn\.com|office|live\.com|bing|azure|skype|amazonaws|aws\.amazon|zscaler|google|googleapis|gstatic|gmail|github|zoom\.us|slack\.com|okta|salesforce|force\.com')
+      GROUP BY 1, 2
+      ORDER BY session_count DESC
+      LIMIT 100
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 100
+
+sections:
+  - id: overview
+    title: Overview
+    type: summary
+    data_source: category_ds
+    metrics:
+      - label: Total SaaS Sessions
+        value_field: session_count
+        aggregation: sum
+        format: number
+      - label: Services Observed
+        value_field: saas_category
+        aggregation: count
+        format: number
+      - label: Unique Clients
+        value_field: unique_clients
+        aggregation: sum
+        format: number
+
+  - id: category_pie
+    title: SaaS Traffic by Service
+    type: chart
+    chart_type: pie
+    data_source: category_ds
+    label_field: saas_category
+    value_field: session_count
+    empty_message: No SaaS TLS traffic observed in this window.
+
+  - id: category_table
+    title: SaaS Service Summary
+    type: table
+    data_source: category_ds
+    columns:
+      - field: saas_category
+        label: Service
+        format: text
+      - field: session_count
+        label: Sessions
+        format: number
+      - field: unique_clients
+        label: Unique Clients
+        format: number
+    row_limit: 20
+    empty_message: No SaaS TLS traffic observed in this window.
+
+  - id: domain_table
+    title: Top SaaS Domains
+    type: table
+    data_source: domain_ds
+    columns:
+      - field: saas_category
+        label: Service
+        format: text
+      - field: domain
+        label: Domain (SNI)
+        format: text
+      - field: session_count
+        label: Sessions
+        format: number
+      - field: unique_clients
+        label: Unique Clients
+        format: number
+    row_limit: 100
+    empty_message: No SaaS TLS traffic observed in this window.
+
+output:
+  default_format: html
+  title_template: "{{ name }} — last {{ days }}d"
+  include_metadata: true

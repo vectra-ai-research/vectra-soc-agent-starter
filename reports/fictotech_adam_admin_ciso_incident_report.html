@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Fictotech CISO Incident Report - Hybrid Identity and Cloud Compromise</title>
+  <style>
+    @page { size: A4; margin: 17mm 15mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: #16202a;
+      background: #ffffff;
+      font: 11.5px/1.42 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    }
+    h1, h2, h3 { margin: 0; color: #0f1720; line-height: 1.16; }
+    h1 { font-size: 27px; max-width: 780px; }
+    h2 { font-size: 16px; margin-top: 22px; padding-bottom: 6px; border-bottom: 1px solid #d7dde5; }
+    h3 { font-size: 12.5px; margin-top: 14px; }
+    p { margin: 7px 0; }
+    ul, ol { margin: 7px 0 0 18px; padding: 0; }
+    li { margin: 3px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0 15px; table-layout: fixed; }
+    th, td { border: 1px solid #d9e0e8; padding: 6px 7px; vertical-align: top; word-wrap: break-word; }
+    th { background: #eef3f8; color: #1d2a35; font-weight: 700; text-align: left; }
+    .cover {
+      border-bottom: 4px solid #1f6f8b;
+      padding-bottom: 16px;
+      margin-bottom: 18px;
+    }
+    .meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+      margin-top: 16px;
+    }
+    .meta div, .callout, .risk-box {
+      border: 1px solid #d7dde5;
+      background: #f7f9fb;
+      padding: 9px 11px;
+    }
+    .label { display: block; color: #5a6875; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; }
+    .value { display: block; margin-top: 3px; font-size: 12.5px; font-weight: 700; }
+    .verdict {
+      display: inline-block;
+      background: #8f1f1f;
+      color: #fff;
+      padding: 5px 9px;
+      font-weight: 700;
+      margin: 10px 0 4px;
+    }
+    .risk-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .risk-box strong { display: block; font-size: 17px; margin-top: 4px; }
+    .sev-critical { color: #8f1f1f; font-weight: 700; }
+    .sev-high { color: #9b5a00; font-weight: 700; }
+    .small { color: #52606d; font-size: 10px; }
+    .page-break { page-break-before: always; }
+    .nowrap { white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <h1>Fictotech CISO Incident Report: Hybrid Identity and Cloud Compromise</h1>
+    <div class="verdict">Verdict: True Positive - High Severity</div>
+    <p>
+      Prepared for the CISO. Vectra evidence shows an incident that began with command-and-control
+      activity on a datacenter collaboration server, moved laterally to a jump station using
+      <strong>adam_admin</strong>, and then expanded into M365, Entra ID, Azure, and AWS through
+      <strong>adam_admin@fictotech.com</strong>.
+    </p>
+    <div class="meta">
+      <div><span class="label">Report Date</span><span class="value">2026-05-19</span></div>
+      <div><span class="label">Primary Account</span><span class="value">adam_admin@fictotech.com (Vectra account 3232)</span></div>
+      <div><span class="label">Primary Hosts</span><span class="value">marketing-collab-server0, jump-station5</span></div>
+      <div><span class="label">Observed Incident Window</span><span class="value">2026-05-15 13:23:01Z - 19:21:32Z</span></div>
+    </div>
+  </section>
+
+  <h2>Executive Summary</h2>
+  <p>
+    The incident should be treated as a confirmed high-severity hybrid compromise. Vectra detected
+    C2-like HTTPS tunneling from <strong>marketing-collab-server0</strong>, internal SMB/LDAP
+    reconnaissance, remote service execution into <strong>jump-station5</strong>, repeated C2-like
+    tunneling from the jump station, further lateral movement, privileged share access, and then a
+    cloud-control-plane sequence using <strong>adam_admin@fictotech.com</strong>.
+  </p>
+  <p>
+    The cloud activity included suspicious sign-ons, automated scripting across Azure and M365,
+    suspicious Copilot access, OAuth consent to <strong>Thunder Jaw Backdoor</strong>, mailbox-rule
+    persistence, AWS organization/IAM enumeration, AWS access-key creation for another admin user,
+    Azure Key Vault privilege assignment, storage/key-vault secret access, and Azure diagnostic
+    logging disablement.
+  </p>
+  <div class="callout">
+    <strong>Business impact assessment:</strong> Potential exposure of cloud secrets and storage keys,
+    persistent access through OAuth/mailbox rules/AWS access keys, impaired Azure diagnostic logging,
+    and lateral movement from datacenter systems. No containment or state-changing action was taken
+    by this assistant.
+  </div>
+
+  <div class="risk-grid">
+    <div class="risk-box"><span class="label">Overall Severity</span><strong class="sev-critical">Critical</strong></div>
+    <div class="risk-box"><span class="label">Primary Account Urgency</span><strong>100</strong></div>
+    <div class="risk-box"><span class="label">Host Threat / Certainty</span><strong>100 / 89</strong></div>
+    <div class="risk-box"><span class="label">Disposition</span><strong>IR Escalation</strong></div>
+  </div>
+
+  <h2>Scope and Evidence Sources</h2>
+  <table>
+    <tr><th>Source</th><th>Evidence Used</th><th>Scope</th></tr>
+    <tr>
+      <td>Vectra entity details</td>
+      <td>Account 3232 plus hosts 94121 and 94124, including urgency, scores, tags, assignments, and sensor context.</td>
+      <td>Active Vectra entities refreshed during the investigation on 2026-05-19.</td>
+    </tr>
+    <tr>
+      <td>Vectra detection details</td>
+      <td>Detections 17148, 17176, 17180, 17186, 17194, 17203, 17204, 17209, and 17210-17225.</td>
+      <td>Active detections associated with marketing-collab-server0, jump-station5, and adam_admin@fictotech.com.</td>
+    </tr>
+    <tr>
+      <td>Vectra network metadata</td>
+      <td>Hidden tunnel destinations, destination domain, session counts, byte counts, JA3 and JA3S values exposed in detection evidence.</td>
+      <td>Network detections on marketing-collab-server0 and jump-station5.</td>
+    </tr>
+    <tr>
+      <td>VirusTotal enrichment</td>
+      <td>Public IP reputation checks for 34.216.204.23, 66.172.48.228, 74.201.86.232, and 40.121.154.127.</td>
+      <td>IOC corroboration only; reputation does not override Vectra behavioral detections.</td>
+    </tr>
+  </table>
+
+  <h2>Incident Timeline</h2>
+  <table>
+    <tr><th style="width: 20%;">Time (UTC)</th><th style="width: 22%;">Activity</th><th>Evidence and Interpretation</th></tr>
+    <tr>
+      <td>2026-05-15 13:23:01 - 13:33:22</td>
+      <td>Initial C2-like HTTPS tunnel</td>
+      <td>marketing-collab-server0 communicated with 40.121.154.127 / minutemen.vault-tech.org. Vectra classified this as Hidden HTTPS Tunnel, with 118 sessions, 29,218 bytes sent, and 649,650 bytes received. Detection 17148.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 14:50:24 - 14:56:17</td>
+      <td>SMB network sweep</td>
+      <td>marketing-collab-server0 performed 196 TCP/445 attempts across 10.232.100.0/24 with no successes, consistent with internal discovery. Detection 17176.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 15:31:45</td>
+      <td>LDAP account enumeration</td>
+      <td>marketing-collab-server0 queried DC-ficto01 / 10.232.100.32 for user and account objects, returning 65 objects. Detection 17180.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 16:05:14</td>
+      <td>Remote service execution to jump station</td>
+      <td>marketing-collab-server0 used adam_admin to invoke CreateServiceW and StartServiceW against jump-station5 / 10.232.100.150 through svcctl. Detection 17186.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 16:05:26 - 16:16:17</td>
+      <td>C2-like tunnel on jump station</td>
+      <td>jump-station5 communicated with the same external destination, 40.121.154.127 / minutemen.vault-tech.org. Vectra classified this as Hidden HTTPS Tunnel, 124 sessions, 29,690 bytes sent, and 656,718 bytes received. Detection 17194.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 17:42:23</td>
+      <td>Remote service execution from jump station</td>
+      <td>jump-station5 used adam_admin to invoke CreateServiceW and StartServiceW against IP-10.232.100.30 / 10.232.100.30. Detection 17203.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 17:42:39 - 17:43:20</td>
+      <td>Internal port scan</td>
+      <td>jump-station5 scanned 10.254.100.62 with 1,000 attempts and no successes. Detection 17204.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 18:18:59</td>
+      <td>High-privilege share access</td>
+      <td>adam_admin accessed cifs:NetworkandCloudArchitectureShare from jump-station5. Vectra marked the resource privilege as High while the account was normally lower privilege. Detections 17209 and 17210.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 18:32:16 - 19:21:28</td>
+      <td>Automated cloud and M365 access</td>
+      <td>adam_admin@fictotech.com used scripting/tooling across Azure AD, ARM, Key Vault, SharePoint, Microsoft Graph, Exchange Online, and Teams from 34.216.204.23 and 66.172.48.228. Detection 17213.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 18:35:30 - 19:21:28</td>
+      <td>Suspicious Entra sign-ons</td>
+      <td>Sign-ons from 34.216.204.23, 66.172.48.228, and 74.201.86.232 carried rare OS/location/anonymization signals and mixed MFA outcomes. Detection 17211.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 18:37:56</td>
+      <td>Suspicious Copilot access</td>
+      <td>CopilotInteraction by adam_admin@fictotech.com from 74.201.86.232. Detection 17212.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 18:43:03</td>
+      <td>Suspicious OAuth consent</td>
+      <td>OAuth application Thunder Jaw Backdoor observed with Mail.Read, User.Read, offline_access, openid, and profile scopes. Detection 17215.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 18:58:47</td>
+      <td>Mailbox-rule persistence</td>
+      <td>Inbox rule fictotech_secrets_adam_admin@fictotech.com was created from 66.172.48.228 with DeleteMessage=True. Detection 17217.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 19:13:47 - 19:13:48</td>
+      <td>AWS organization discovery</td>
+      <td>SAML:adam_admin@fictotech.com assumed AAD_VTL_AdministratorAccess and ran DescribeOrganization/ListAccountAliases in AWS account 073942728427 from 34.216.204.23. Detection 17221.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 19:14:51 - 19:17:13</td>
+      <td>AWS IAM enumeration</td>
+      <td>The same assumed role ran ListUsers, ListRoles, and ListGroups through Boto3/Botocore user agents. Detection 17219.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 19:18:14</td>
+      <td>AWS access-key creation</td>
+      <td>AWS CreateAccessKey was performed for another admin user, alex_admin@fictotech.com-191512. Detection 17222. Access-key material is intentionally not reproduced in this report.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 19:20:23 - 19:21:32</td>
+      <td>Azure access from AWS-hosted source</td>
+      <td>Activity from 34.216.204.23 included role assignment, storage account key listing, diagnostic setting deletion, Key Vault secret listing, and vault access. Detection 17224.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 19:20:24</td>
+      <td>Key Vault privilege grant</td>
+      <td>adam_admin@fictotech.com was granted Key Vault Administrator on fic-secret-vault. Detection 17225.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 19:21:28 - 19:21:32</td>
+      <td>Credential and secret access</td>
+      <td>Suspicious Azure credential access touched storage accounts and Key Vault resources, including storage/key-vault providers and two credential-access indicators. Detection 17223.</td>
+    </tr>
+    <tr>
+      <td>2026-05-15 19:21:30</td>
+      <td>Diagnostic logging disabled</td>
+      <td>Azure diagnostic logging was disabled for customer3197datastore / customer-storage-diag-setting-2 in resource group fictotech_azure. Detection 17220.</td>
+    </tr>
+  </table>
+
+  <div class="page-break"></div>
+  <h2>Connected Entities and Assets</h2>
+  <table>
+    <tr><th>Entity</th><th>Role in Incident</th><th>Observed State / Notes</th></tr>
+    <tr>
+      <td>adam_admin@fictotech.com<br><span class="small">Vectra account 3232</span></td>
+      <td>Primary compromised identity used across Kerberos, O365, AWS, and Entra principal surfaces.</td>
+      <td><span class="sev-critical">Critical</span>, urgency 100, threat 100, certainty 79, active, prioritized, unassigned, tag Fictotech.</td>
+    </tr>
+    <tr>
+      <td>Associated account identities</td>
+      <td>Identity aliases observed for the same user across services.</td>
+      <td>adam_admin@fictotech.com, O365:adam_admin@fictotech.com, SAML:adam_admin@fictotech.com, 528f98b1-f6e1-4e9b-a2e7-539457bdf00c.</td>
+    </tr>
+    <tr>
+      <td>marketing-collab-server0 / 10.232.100.62<br><span class="small">Vectra host 94121</span></td>
+      <td>Earliest observed affected host: C2-like tunnel, SMB sweep, LDAP enumeration, then remote execution into jump-station5.</td>
+      <td><span class="sev-critical">Critical</span>, threat 100, certainty 83, datacenter group. Notes previously indicated EDR limitations and escalation to L2.</td>
+    </tr>
+    <tr>
+      <td>jump-station5 / 10.232.100.150<br><span class="small">Vectra host 94124</span></td>
+      <td>Lateral-movement target and follow-on launch point for C2-like traffic, remote execution, scanning, and privileged CIFS access.</td>
+      <td><span class="sev-critical">Critical</span>, threat 100, certainty 89, active, unassigned, datacenter group.</td>
+    </tr>
+    <tr>
+      <td>DC-ficto01 / 10.232.100.32<br><span class="small">Vectra host 94119</span></td>
+      <td>LDAP enumeration target from marketing-collab-server0.</td>
+      <td>Connected infrastructure asset; query returned 65 account/user objects.</td>
+    </tr>
+    <tr>
+      <td>IP-10.232.100.30 / 10.232.100.30<br><span class="small">Vectra host 94287</span></td>
+      <td>Remote service execution target from jump-station5 using adam_admin.</td>
+      <td>Connected internal host; no separate active detection set cited in this report.</td>
+    </tr>
+    <tr>
+      <td>10.254.100.62</td>
+      <td>Internal port-scan target from jump-station5.</td>
+      <td>1,000 attempts, no successes observed in Vectra detection evidence.</td>
+    </tr>
+    <tr>
+      <td>NetworkandCloudArchitectureShare</td>
+      <td>High-privilege CIFS share accessed by adam_admin from jump-station5.</td>
+      <td>Resource privilege marked High by Vectra.</td>
+    </tr>
+    <tr>
+      <td>AWS account 073942728427</td>
+      <td>AWS discovery, IAM enumeration, and access-key creation via federated adam_admin role.</td>
+      <td>Assumed role path: SAML:adam_admin@fictotech.com to AAD_VTL_AdministratorAccess.</td>
+    </tr>
+    <tr>
+      <td>Azure tenant and subscription</td>
+      <td>Key Vault privilege grant, diagnostic logging disablement, credential/secret access.</td>
+      <td>Tenant 9ccb96dd-ebcf-44ff-badd-5a02728f9ef1; subscription 5be05d3a-316e-4454-a684-bd0f69f7ec64; resource group fictotech_azure.</td>
+    </tr>
+    <tr>
+      <td>fic-secret-vault</td>
+      <td>Azure Key Vault affected by privilege grant and vault/secret access activity.</td>
+      <td>Key Vault Administrator granted to adam_admin@fictotech.com during incident window.</td>
+    </tr>
+    <tr>
+      <td>customer3197datastore</td>
+      <td>Azure storage/logging target where diagnostic logging was disabled.</td>
+      <td>Diagnostic setting customer-storage-diag-setting-2 disabled at 19:21:30Z.</td>
+    </tr>
+    <tr>
+      <td>Thunder Jaw Backdoor</td>
+      <td>Suspicious OAuth application observed for adam_admin@fictotech.com.</td>
+      <td>Scopes included Mail.Read, User.Read, offline_access, openid, and profile.</td>
+    </tr>
+    <tr>
+      <td>fictotech_secrets_adam_admin@fictotech.com</td>
+      <td>Suspicious mailbox rule created in M365.</td>
+      <td>Rule action included DeleteMessage=True.</td>
+    </tr>
+  </table>
+
+  <h2>External Infrastructure and IOC Context</h2>
+  <table>
+    <tr><th>Observable</th><th>Incident Context</th><th>Assessment</th></tr>
+    <tr>
+      <td>40.121.154.127<br>minutemen.vault-tech.org</td>
+      <td>Destination for Hidden HTTPS Tunnel detections from marketing-collab-server0 and jump-station5. Shared JA3 3b5074b1b5d032e5620f69f9f700ff0e and JA3S ec74a5c51106f0419184d0dd08fb05bc.</td>
+      <td>Behavioral C2 indicator. VirusTotal returned 0 malicious and 0 suspicious detections; this does not reduce Vectra's behavioral finding.</td>
+    </tr>
+    <tr>
+      <td>34.216.204.23</td>
+      <td>Source IP for AWS and Azure activity: AWS enumeration, access-key creation, Azure role assignment, storage key listing, Key Vault access, and diagnostic setting deletion.</td>
+      <td>High-risk cloud source in incident context. VirusTotal returned 0 malicious and 0 suspicious detections; ASN 16509, US.</td>
+    </tr>
+    <tr>
+      <td>66.172.48.228</td>
+      <td>Source IP for M365 mailbox-rule creation and Entra scripting activity.</td>
+      <td>Suspicious in behavioral context. VirusTotal returned 0 malicious and 0 suspicious detections; ASN 4213, US.</td>
+    </tr>
+    <tr>
+      <td>74.201.86.232</td>
+      <td>Source IP for suspicious Copilot access and Entra sign-on evidence.</td>
+      <td>Suspicious in behavioral context. VirusTotal returned 0 malicious and 0 suspicious detections; ASN 12182, US.</td>
+    </tr>
+  </table>
+
+  <h2>Likely Attack Narrative</h2>
+  <p>
+    The most defensible interpretation is a multi-stage intrusion. An operator established or used
+    an HTTPS tunnel from marketing-collab-server0, performed SMB and LDAP discovery, then used
+    adam_admin to execute services on jump-station5. The same external tunnel pattern appeared on
+    jump-station5 shortly afterward, followed by remote execution to another internal host, scanning,
+    and anomalous high-privilege share access. The identity then became active across SaaS and cloud
+    control planes, showing automation, OAuth and mailbox persistence, AWS discovery and key creation,
+    Azure privilege changes, secret access, and logging impairment.
+  </p>
+  <p>
+    The density and order of events, the cross-domain nature of the activity, and the use of multiple
+    external source IPs make benign administration unlikely. The incident should be handled as an
+    active or recently active compromise until containment and forensic validation are complete.
+  </p>
+
+  <h2>Risk and Impact</h2>
+  <table>
+    <tr><th>Risk Area</th><th>Impact</th><th>Evidence</th></tr>
+    <tr>
+      <td>Credential and secret exposure</td>
+      <td>Potential compromise of storage keys, Key Vault secrets, and cloud credentials.</td>
+      <td>Azure Suspect Credential Dump, Azure Suspicious Access from AWS Cloud, Key Vault Administrator grant.</td>
+    </tr>
+    <tr>
+      <td>Persistence</td>
+      <td>Potential durable access through OAuth refresh tokens, mailbox rules, and AWS access keys.</td>
+      <td>Thunder Jaw Backdoor OAuth app, M365 DeleteMessage inbox rule, AWS CreateAccessKey.</td>
+    </tr>
+    <tr>
+      <td>Defense evasion</td>
+      <td>Reduced Azure visibility during or after the incident.</td>
+      <td>Azure diagnostic logging disabled on customer3197datastore.</td>
+    </tr>
+    <tr>
+      <td>Lateral movement</td>
+      <td>Remote service execution and internal discovery from datacenter systems.</td>
+      <td>Remote execution from marketing-collab-server0 to jump-station5, remote execution from jump-station5 to 10.232.100.30, SMB/LDAP recon, and port scan.</td>
+    </tr>
+    <tr>
+      <td>Cloud control-plane exposure</td>
+      <td>Potential unauthorized access to AWS IAM, Azure Key Vault, Azure storage keys, and M365 mailbox data.</td>
+      <td>AWS IAM enumeration, Azure storage listkeys, Key Vault operations, Mail.Read OAuth scope, suspicious Copilot access.</td>
+    </tr>
+  </table>
+
+  <h2>Recommended Executive Actions</h2>
+  <ol>
+    <li>Declare or continue formal incident response handling and assign accountable owners for identity, endpoint, cloud, and communications workstreams.</li>
+    <li>Preserve Vectra evidence, EDR telemetry, Entra ID sign-in/audit logs, M365 unified audit logs, AWS CloudTrail, Azure Activity Logs, Key Vault logs, and storage account logs before disruptive containment where possible.</li>
+    <li>With human approval, contain adam_admin@fictotech.com: revoke sessions and refresh tokens, rotate credentials, review MFA methods, and disable or restrict the account until forensic review completes.</li>
+    <li>Remove or disable the suspicious OAuth application and mailbox rule after preserving evidence; search for the same app, scopes, and rule pattern across other users.</li>
+    <li>Rotate exposed or potentially exposed AWS access keys, Azure storage account keys, Key Vault secrets, certificates, and service principal credentials touched during the incident window.</li>
+    <li>Investigate marketing-collab-server0 and jump-station5 with EDR and forensic tooling, focusing on 2026-05-15 13:20Z-18:30Z, service creation, outbound HTTPS to 40.121.154.127, and lateral movement artifacts.</li>
+    <li>Review AWS account 073942728427 for persistence, unauthorized keys, role changes, new users, CloudTrail tampering, and data access following 19:13Z.</li>
+    <li>Restore and validate Azure diagnostic logging on affected resources, then run a retrospective search for activity during the visibility gap.</li>
+  </ol>
+
+  <h2>Known Gaps</h2>
+  <ul>
+    <li>This report is based on Vectra entity and detection evidence plus prior IOC enrichment; it is not a full endpoint forensic image, SIEM reconstruction, or legal evidence package.</li>
+    <li>No raw Investigation Query SQL event timeline was executed for this report-generation step; detections provide the authoritative Vectra event anchors cited here.</li>
+    <li>No direct EDR process tree, memory analysis, file-system artifact review, mailbox-content review, or cloud object-access validation was performed by this assistant.</li>
+    <li>Vectra behavior and metadata do not prove exact data exfiltration volume from cloud stores; cloud-native logs and storage/key-vault audit records are required for that determination.</li>
+    <li>No containment, note updates, alert closure, entity assignment, account disablement, session revocation, or ticket creation was performed by this assistant.</li>
+  </ul>
+
+  <h2>Conclusion</h2>
+  <p>
+    The evidence supports a confirmed, high-severity compromise spanning on-premises lateral movement
+    and cloud identity/control-plane abuse. The priority is to preserve evidence, contain the compromised
+    identity and affected hosts with approval, remove persistence, rotate exposed secrets, and validate
+    whether cloud data or secrets were accessed or exfiltrated.
+  </p>
+</body>
+</html>

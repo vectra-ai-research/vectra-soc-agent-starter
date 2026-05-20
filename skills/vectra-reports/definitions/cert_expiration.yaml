@@ -1,0 +1,102 @@
+id: cert_expiration
+name: Certificate Expiration
+description: >-
+  Lists TLS certificates observed in network traffic sorted by days until
+  expiration. Surfaces certificates expiring within 30, 60, and 90 days to
+  support proactive renewal. Also identifies already-expired certificates still
+  in active use.
+category: Network
+version: "1.0"
+parameters:
+  - name: days
+    type: int
+    description: Days of history for certificate observation (1–14).
+    default: 7
+    required: false
+  - name: expiry_window
+    type: int
+    description: Show certificates expiring within this many days.
+    default: 90
+    required: false
+data_sources:
+  - id: cert_ds
+    type: investigation_query
+    query: |
+      SELECT
+        certificate.subject AS subject,
+        certificate.issuer AS issuer,
+        COALESCE(resp_hostname.name, id.resp_h) AS observed_host,
+        id.resp_h AS server_ip,
+        DATE_DIFF('day', now(), FROM_UNIXTIME(certificate.not_valid_after / 1000)) AS days_remaining,
+        FROM_UNIXTIME(certificate.not_valid_after / 1000) AS expiry_date,
+        certificate.key_type AS key_type,
+        certificate.key_length AS key_length,
+        COUNT(*) AS observation_count
+      FROM network.x509._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND certificate.not_valid_after IS NOT NULL
+        AND DATE_DIFF('day', now(), FROM_UNIXTIME(certificate.not_valid_after / 1000)) <= {{ expiry_window | int }}
+      GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+      ORDER BY days_remaining ASC
+      LIMIT 50
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 100
+
+sections:
+  - id: overview
+    title: Overview
+    type: summary
+    data_source: cert_ds
+    metrics:
+      - label: Certificates Found
+        value_field: subject
+        aggregation: count
+        format: number
+      - label: Already Expired
+        value_field: days_remaining
+        aggregation: count
+        format: number
+
+  - id: cert_table
+    title: Certificates Expiring Soon
+    type: table
+    data_source: cert_ds
+    columns:
+      - field: days_remaining
+        label: Days Remaining
+        format: number
+      - field: expiry_date
+        label: Expiry Date
+        format: text
+      - field: observed_host
+        label: Observed Host
+        format: text
+      - field: server_ip
+        label: Server IP
+        format: ip
+      - field: subject
+        label: Certificate Subject
+        format: text
+      - field: issuer
+        label: Issuer
+        format: text
+      - field: key_type
+        label: Key Type
+        format: text
+      - field: key_length
+        label: Key Length
+        format: text
+      - field: observation_count
+        label: Observations
+        format: number
+    row_limit: 50
+    empty_message: No certificates expiring within the configured window.
+
+output:
+  default_format: html
+  title_template: "{{ name }} — expiring within {{ expiry_window }}d"
+  include_metadata: true

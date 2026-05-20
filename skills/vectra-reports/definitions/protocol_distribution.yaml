@@ -1,0 +1,118 @@
+id: protocol_distribution
+name: Protocol Distribution
+description: >-
+  Breaks down network sessions by application protocol (DNS, TLS, HTTP, SMB,
+  LDAP, Kerberos, DCE/RPC, RDP, SSH, etc.) as identified by Vectra's Zeek
+  sensor. Use to baseline normal protocol mix, detect unexpected protocol
+  usage, and understand east-west traffic composition.
+category: Network
+version: "1.0"
+parameters:
+  - name: days
+    type: int
+    description: Days of history (1–14).
+    default: 7
+    required: false
+data_sources:
+  - id: protocol_ds
+    type: investigation_query
+    query: |
+      SELECT
+        CASE
+          WHEN service = 'unknown (unknown)' OR service IS NULL OR service = '' THEN 'Unknown'
+          ELSE service
+        END AS protocol,
+        COUNT(*) AS session_count,
+        SUM(orig_ip_bytes) AS bytes_sent,
+        SUM(resp_ip_bytes) AS bytes_received
+      FROM network.isession._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+      GROUP BY 1
+      ORDER BY session_count DESC
+      LIMIT 30
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 50
+
+  - id: detail_ds
+    type: investigation_query
+    query: |
+      SELECT
+        CASE
+          WHEN service = 'unknown (unknown)' OR service IS NULL OR service = '' THEN 'Unknown'
+          ELSE service
+        END AS protocol,
+        proto_name,
+        COUNT(*) AS session_count,
+        SUM(orig_ip_bytes) AS bytes_sent,
+        SUM(resp_ip_bytes) AS bytes_received
+      FROM network.isession._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+      GROUP BY 1, 2
+      ORDER BY session_count DESC
+      LIMIT 50
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 100
+
+sections:
+  - id: overview
+    title: Overview
+    type: summary
+    data_source: protocol_ds
+    metrics:
+      - label: Total Sessions
+        value_field: session_count
+        aggregation: sum
+        format: number
+      - label: Protocols Identified
+        value_field: protocol
+        aggregation: count
+        format: number
+      - label: Total Bytes
+        value_field: bytes_sent
+        aggregation: sum
+        format: bytes
+
+  - id: protocol_pie
+    title: Sessions by Protocol
+    type: chart
+    chart_type: pie
+    data_source: protocol_ds
+    label_field: protocol
+    value_field: session_count
+    empty_message: No session data in this window.
+
+  - id: detail_table
+    title: Protocol Breakdown by Transport
+    type: table
+    data_source: detail_ds
+    columns:
+      - field: protocol
+        label: Protocol
+        format: text
+      - field: proto_name
+        label: Transport
+        format: text
+      - field: session_count
+        label: Sessions
+        format: number
+      - field: bytes_sent
+        label: Bytes Sent
+        format: bytes
+      - field: bytes_received
+        label: Bytes Received
+        format: bytes
+    row_limit: 50
+    empty_message: No session data in this window.
+
+output:
+  default_format: html
+  title_template: "{{ name }} — last {{ days }}d"
+  include_metadata: true

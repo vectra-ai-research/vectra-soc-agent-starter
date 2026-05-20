@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+.env
+.env.local
+.mcp.json
+.codex/
+.DS_Store
+*.egg-info/
+build/
+dist/
+out/
+*.html.tmp
+.claude/
+.agents/
+
+# Persona routing tests live in the private repo
+skills/tests/

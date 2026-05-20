@@ -1,0 +1,127 @@
+id: vlan_utilization
+name: VLAN Utilization
+description: >-
+  Summarizes network session volume and data transfer by VLAN pair
+  (source VLAN → destination VLAN) using Vectra's orig_vlan_id and
+  resp_vlan_id fields. Use to identify high-traffic VLANs, unexpected
+  cross-VLAN flows, and segmentation gaps.
+
+  Note: VLAN ID values 65534 and 65535 are Vectra internal placeholders
+  for untagged or trunk traffic. If only these values appear, the sensor
+  deployment may not be capturing 802.1Q VLAN tags on monitored spans.
+category: Network
+version: "1.0"
+parameters:
+  - name: days
+    type: int
+    description: Days of history (1–14).
+    default: 7
+    required: false
+data_sources:
+  - id: vlan_src_ds
+    type: investigation_query
+    query: |
+      SELECT
+        CAST(orig_vlan_id AS VARCHAR) AS src_vlan,
+        COUNT(*) AS session_count,
+        COUNT(DISTINCT id.orig_h) AS unique_sources,
+        SUM(orig_ip_bytes) AS bytes_sent,
+        SUM(resp_ip_bytes) AS bytes_received
+      FROM network.isession._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND orig_vlan_id IS NOT NULL
+      GROUP BY 1
+      ORDER BY session_count DESC
+      LIMIT 30
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 50
+
+  - id: vlan_pair_ds
+    type: investigation_query
+    query: |
+      SELECT
+        CAST(orig_vlan_id AS VARCHAR) AS src_vlan,
+        CAST(resp_vlan_id AS VARCHAR) AS dst_vlan,
+        COUNT(*) AS session_count,
+        COUNT(DISTINCT id.orig_h) AS unique_sources,
+        COUNT(DISTINCT id.resp_h) AS unique_destinations,
+        SUM(orig_ip_bytes) AS bytes_sent,
+        SUM(resp_ip_bytes) AS bytes_received
+      FROM network.isession._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND orig_vlan_id IS NOT NULL
+      GROUP BY 1, 2
+      ORDER BY session_count DESC
+      LIMIT 50
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 100
+
+sections:
+  - id: overview
+    title: Overview
+    type: summary
+    data_source: vlan_src_ds
+    metrics:
+      - label: Total Sessions
+        value_field: session_count
+        aggregation: sum
+        format: number
+      - label: Source VLANs
+        value_field: src_vlan
+        aggregation: count
+        format: number
+      - label: Total Bytes Sent
+        value_field: bytes_sent
+        aggregation: sum
+        format: bytes
+
+  - id: vlan_src_pie
+    title: Sessions by Source VLAN
+    type: chart
+    chart_type: pie
+    data_source: vlan_src_ds
+    label_field: src_vlan
+    value_field: session_count
+    empty_message: No VLAN-tagged session data in this window.
+
+  - id: vlan_pair_table
+    title: VLAN Pair Traffic
+    type: table
+    data_source: vlan_pair_ds
+    columns:
+      - field: src_vlan
+        label: Source VLAN
+        format: text
+      - field: dst_vlan
+        label: Dest VLAN
+        format: text
+      - field: session_count
+        label: Sessions
+        format: number
+      - field: unique_sources
+        label: Unique Sources
+        format: number
+      - field: unique_destinations
+        label: Unique Destinations
+        format: number
+      - field: bytes_sent
+        label: Bytes Sent
+        format: bytes
+      - field: bytes_received
+        label: Bytes Received
+        format: bytes
+    row_limit: 50
+    empty_message: No VLAN-tagged session data in this window.
+
+output:
+  default_format: html
+  title_template: "{{ name }} — last {{ days }}d"
+  include_metadata: true

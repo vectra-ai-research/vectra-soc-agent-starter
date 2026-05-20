@@ -1,0 +1,109 @@
+id: active_connections
+name: Active Connection Count
+description: >-
+  Approximates concurrent active connections by counting sessions observed
+  within a short recent window, grouped by protocol and internal host.
+  Because Vectra records completed sessions (not live flow state), this is a
+  trailing-window count rather than a true point-in-time snapshot — use the
+  window parameter to tune the lookback granularity.
+  Use to understand current load distribution, detect connection-count spikes,
+  and identify hosts with abnormally high fan-out.
+category: Network
+version: "1.0"
+parameters:
+  - name: hours
+    type: int
+    description: Trailing window in hours to approximate active connections (1–24).
+    default: 1
+    required: false
+data_sources:
+  - id: proto_ds
+    type: investigation_query
+    query: |
+      SELECT
+        CASE
+          WHEN service = 'unknown (unknown)' OR service IS NULL OR service = '' THEN 'Unknown'
+          ELSE service
+        END AS protocol,
+        COUNT(*) AS session_count
+      FROM network.isession._all
+      WHERE dt > date_add('hour', -{{ hours | int }}, now())
+        AND timestamp BETWEEN date_add('hour', -{{ hours | int }}, now()) AND now()
+      GROUP BY 1
+      ORDER BY session_count DESC
+      LIMIT 30
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 50
+
+  - id: host_ds
+    type: investigation_query
+    query: |
+      SELECT
+        id.orig_h AS src_ip,
+        COALESCE(orig_hostname.name, id.orig_h) AS src_label,
+        COUNT(*) AS session_count,
+        COUNT(DISTINCT id.resp_h) AS unique_destinations
+      FROM network.isession._all
+      WHERE dt > date_add('hour', -{{ hours | int }}, now())
+        AND timestamp BETWEEN date_add('hour', -{{ hours | int }}, now()) AND now()
+        AND local_orig = true
+      GROUP BY id.orig_h, orig_hostname.name
+      ORDER BY session_count DESC
+      LIMIT 50
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 100
+
+sections:
+  - id: overview
+    title: Overview
+    type: summary
+    data_source: proto_ds
+    metrics:
+      - label: Sessions in Window
+        value_field: session_count
+        aggregation: sum
+        format: number
+      - label: Protocols Active
+        value_field: protocol
+        aggregation: count
+        format: number
+
+  - id: proto_pie
+    title: Connections by Protocol
+    type: chart
+    chart_type: pie
+    data_source: proto_ds
+    label_field: protocol
+    value_field: session_count
+    empty_message: No session data in this window.
+
+  - id: host_table
+    title: Most Active Internal Hosts
+    type: table
+    data_source: host_ds
+    columns:
+      - field: src_ip
+        label: Source IP
+        format: ip
+      - field: src_label
+        label: Hostname
+        format: text
+      - field: session_count
+        label: Sessions
+        format: number
+      - field: unique_destinations
+        label: Unique Destinations
+        format: number
+    row_limit: 50
+    empty_message: No session data in this window.
+
+output:
+  default_format: html
+  title_template: "{{ name }} — last {{ hours }}h window"
+  include_metadata: true

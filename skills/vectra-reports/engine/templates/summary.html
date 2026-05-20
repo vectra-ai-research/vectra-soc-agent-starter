@@ -1,0 +1,42 @@
+<section style="
+    background: var(--bg-card);
+    border: 1px solid var(--accent-border);
+    border-radius: 6px;
+    margin: 16px 24px;
+    overflow: hidden;
+">
+    <div style="
+        padding: 12px 20px;
+        border-bottom: 1px solid var(--accent-border);
+        background: #f7fafc;
+    ">
+        <h2 style="margin: 0; font-size: 14px; font-weight: 600;
+                   color: var(--text-primary); font-family: var(--font-sans);">
+            {{ section_title }}
+        </h2>
+    </div>
+    <div style="padding: 16px 20px;">
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            {% for metric in metrics %}
+            <div style="
+                flex: 1; min-width: 140px;
+                background: var(--bg-page);
+                border: 1px solid var(--accent-border);
+                border-radius: 6px;
+                padding: 14px 16px;
+                text-align: center;
+            ">
+                <div style="font-size: 26px; font-weight: 700;
+                            color: var(--text-primary); font-family: var(--font-sans);">
+                    {{ metric.value }}
+                </div>
+                <div style="font-size: 11px; color: var(--text-secondary);
+                            margin-top: 4px; text-transform: uppercase;
+                            letter-spacing: 0.05em;">
+                    {{ metric.label }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>

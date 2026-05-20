@@ -1,0 +1,113 @@
+id: http_status_codes
+name: HTTP Status Code Distribution
+description: >-
+  Breaks down HTTP traffic by response status class (2xx, 3xx, 4xx, 5xx) and
+  identifies the top hosts generating client and server errors. Use to detect
+  application failures, scanning activity, and misconfigured services.
+category: Network
+version: "1.0"
+parameters:
+  - name: days
+    type: int
+    description: Days of history (1–14).
+    default: 7
+    required: false
+data_sources:
+  - id: status_ds
+    type: investigation_query
+    query: |
+      SELECT
+        CASE
+          WHEN status_code >= 500 THEN '5xx Server Error'
+          WHEN status_code >= 400 THEN '4xx Client Error'
+          WHEN status_code >= 300 THEN '3xx Redirect'
+          WHEN status_code >= 200 THEN '2xx Success'
+          WHEN status_code >= 100 THEN '1xx Informational'
+          ELSE 'Unknown'
+        END AS status_class,
+        COUNT(*) AS request_count
+      FROM network.http._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND status_code IS NOT NULL
+      GROUP BY 1
+      ORDER BY request_count DESC
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 50
+
+  - id: error_ds
+    type: investigation_query
+    query: |
+      SELECT
+        COALESCE(host, id.resp_h) AS dest_host,
+        CASE
+          WHEN status_code >= 500 THEN '5xx Server Error'
+          WHEN status_code >= 400 THEN '4xx Client Error'
+          ELSE 'Other'
+        END AS status_class,
+        COUNT(*) AS error_count,
+        COUNT(DISTINCT id.orig_h) AS unique_clients
+      FROM network.http._all
+      WHERE dt > date_add('day', -{{ days | int }}, now())
+        AND timestamp BETWEEN date_add('day', -{{ days | int }}, now()) AND now()
+        AND status_code >= 400
+      GROUP BY 1, 2
+      ORDER BY error_count DESC
+      LIMIT 50
+    parameters: {}
+    pagination:
+      enabled: false
+      max_pages: 1
+      page_size: 100
+
+sections:
+  - id: overview
+    title: Overview
+    type: summary
+    data_source: status_ds
+    metrics:
+      - label: Total Requests
+        value_field: request_count
+        aggregation: sum
+        format: number
+      - label: Status Classes
+        value_field: status_class
+        aggregation: count
+        format: number
+
+  - id: status_pie
+    title: Requests by Status Class
+    type: chart
+    chart_type: pie
+    data_source: status_ds
+    label_field: status_class
+    value_field: request_count
+    empty_message: No HTTP request data in this window.
+
+  - id: error_table
+    title: Top Error-Generating Hosts
+    type: table
+    data_source: error_ds
+    columns:
+      - field: dest_host
+        label: Destination Host
+        format: text
+      - field: status_class
+        label: Status Class
+        format: text
+      - field: error_count
+        label: Error Count
+        format: number
+      - field: unique_clients
+        label: Unique Clients
+        format: number
+    row_limit: 50
+    empty_message: No HTTP error data in this window.
+
+output:
+  default_format: html
+  title_template: "{{ name }} — last {{ days }}d"
+  include_metadata: true
