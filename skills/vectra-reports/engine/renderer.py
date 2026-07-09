@@ -531,7 +531,7 @@ def _render_markdown(
         lines.append("---")
         lines.append("")
         for src in execution_metadata.get("sources", []):
-            err = src.get("error") or ""
+            err = src.get("error") or src.get("warning") or ""
             lines.append(
                 f"- **{src['id']}:** {src.get('row_count', 0)} rows, "
                 f"{src.get('duration_ms', 0)} ms"
@@ -641,7 +641,7 @@ def _fallback_empty_section(title: str, message: str) -> str:
 def _fallback_footer(metadata: dict[str, Any], version: str) -> str:
     lines: list[str] = []
     for src in metadata.get("sources", []):
-        err = src.get("error") or ""
+        err = src.get("error") or src.get("warning") or ""
         sid = html.escape(str(src.get("id", "")))
         e = html.escape(err) if err else ""
         line = (

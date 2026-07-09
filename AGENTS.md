@@ -68,8 +68,9 @@ load `vectra-investigator` first — it routes for you.
      out of scope; route to a vuln scanner.
    - "What's our MTTR?" — SOC performance metrics aren't in
      Vectra's data model.
-   - "What detections cover MITRE T1558.003?" — coverage mapping
-     lives in TOPCAT.
+   - "What detections cover MITRE T1558.003?" — detection-to-MITRE
+     coverage mapping isn't in this toolkit; route to your
+     coverage-mapping tooling or Vectra's detection documentation.
    - "What's a detection?" / "What does this tool do?" — answer
      conversationally from `AGENTS.md`; don't load a skill.
 

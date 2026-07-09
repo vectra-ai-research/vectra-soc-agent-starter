@@ -34,7 +34,7 @@ virustotal_enrich() {
     "VirusTotal request failed" \
     "VirusTotal returned non-JSON" \
     --header "x-apikey: ${VT_API_KEY}" \
-    --header "User-Agent: codex-ioc-workflow/1.0" \
+    --header "User-Agent: vectra-soc-agent-starter/virustotal-adapter" \
     --source "VirusTotal" \
     --max-time "${TIMEOUT_OVERRIDE:-30}"; then
     return 0

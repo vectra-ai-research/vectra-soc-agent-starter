@@ -36,23 +36,14 @@ sharp.
 
 ---
 
-## Skill index — one line each
+## Skill index
 
-Trigger-shaped descriptions. The full prose is in each `SKILL.md`; the
-router lives in [`../AGENTS.md`](../AGENTS.md).
-
-| Skill | Use when… |
-|-------|-----------|
-| [`vectra-investigator`](vectra-investigator/SKILL.md) | **Default** for any open-ended Vectra request. Owns workflow selection and the verdict framework. Routes into the sub-skills below. |
-| [`vectra-hunt`](vectra-hunt/SKILL.md) | Ad-hoc Investigation Query SQL or a TI report / IOC list / named actor to validate against the environment. |
-| [`vectra-reports`](vectra-reports/SKILL.md) | The user **explicitly names** a canned report **and** Python 3.11+ is available. |
-| [`vectra-reports-mcp`](vectra-reports-mcp/SKILL.md) | Same named-report trigger, executed via MCP (no Python venv needed). |
-| [`vectra-pcap`](vectra-pcap/SKILL.md) | A Vectra **network** detection ID and the user wants the underlying packets. |
-| [`virustotal`](virustotal/SKILL.md) | Enrich an IOC (hash / IP / domain / URL) with VirusTotal reputation. |
-
-**Default for ambiguous Vectra log / metadata questions:** `vectra-hunt`,
-not `vectra-reports*`. Reports require an explicit named report from the
-catalogue.
+The trigger-shaped "Use when…" catalog lives **only** in
+[`../AGENTS.md` → Skills catalog](../AGENTS.md#skills-catalog) — it is
+the single source of truth for routing and is not repeated here (a
+second copy would drift). The layout tree above tells you what each
+directory *is*; each `SKILL.md` frontmatter tells the agent *when* to
+fire it.
 
 ---
 

@@ -133,19 +133,26 @@ runtime — your customers' SOC team can read every line and feel safe.
 vectra-soc-agent-starter/
 ├── README.md            # This file
 ├── AGENTS.md            # Agent instruction set (read this second)
+├── SECURITY.md          # Security policy
 ├── install/
 │   ├── README.md        # Concepts, prerequisites, the 3 skill-discovery patterns
 │   ├── CLAUDE_CODE.md   # Per-host install guides (Pattern A)
 │   ├── CODEX.md         # Pattern B
 │   └── GOOSE.md         # Pattern C
 ├── skills/
-│   ├── README.md             # Skills catalog + decision guide
+│   ├── README.md             # Author/maintainer view: layout, packaging, adding skills
+│   ├── PACKAGING.md          # Shipping guidance (Python-vs-MCP, symlinks, lockfiles)
+│   ├── scripts/check.sh      # Pre-ship checks (run in CI)
 │   ├── vectra-investigator/  # Main orchestrator + detection-category playbooks
 │   ├── vectra-hunt/          # Ad-hoc SQL + TI-driven hunts
 │   ├── vectra-reports/       # Canned reports (Python)
 │   ├── vectra-reports-mcp/   # Canned reports (MCP)
 │   ├── vectra-pcap/          # Detection PCAP retrieval (MCP) + tshark triage
 │   └── virustotal/           # VirusTotal IOC enrichment (Bash adapter)
+├── scripts/
+│   └── bundle_desktop.py     # Zip each skill for Claude Desktop upload
+├── reports/             # Demo artifacts — sample incident reports the agent produced
+├── .github/workflows/   # CI — runs skills/scripts/check.sh
 └── .env.template        # Credentials template (copy to .env, never commit)
 ```
 

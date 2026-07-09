@@ -287,10 +287,10 @@ class VectraClient:
         if resp.status_code == 404:
             raise VectraAPIError("Resource not found", status_code=404)
         if resp.status_code == 429:
+            # No inline sleep here — tenacity owns the retry wait. Sleeping on
+            # Retry-After *and* raising would double the back-off.
             retry_after = resp.headers.get("Retry-After")
             wait_sec = float(retry_after) if retry_after else None
-            if wait_sec:
-                await asyncio.sleep(wait_sec)
             raise RateLimitError(retry_after=wait_sec)
         if not resp.is_success:
             try:
