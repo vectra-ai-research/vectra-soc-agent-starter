@@ -45,7 +45,9 @@ case "$ioc_type" in
   url)
     command -v base64 >/dev/null || {
       echo "vt-lookup: base64 not found (required for URL IOCs)" >&2; exit 3; }
-    enc=$(printf '%s' "$ioc" | base64 | tr -d '=' | tr '/+' '_-')
+    # tr strips '=' padding AND newlines — GNU base64 wraps output at 76
+    # chars, which would corrupt the VT object id for long URLs.
+    enc=$(printf '%s' "$ioc" | base64 | tr -d '=\n' | tr '/+' '_-')
     path="urls/${enc}"
     ;;
   *)

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import re
 import time
 from typing import Any
 
@@ -130,6 +131,7 @@ async def _run_investigation_source(
         )
 
     poll_response: dict[str, Any] | None = None
+    poll_started = time.perf_counter()
     for attempt in range(MAX_POLLS):
         await asyncio.sleep(POLL_INTERVAL_SEC)
         try:
@@ -152,12 +154,13 @@ async def _run_investigation_source(
         if status == "SUCCESS":
             break
     else:
-        raise QueryTimeoutError(request_id, MAX_POLLS * POLL_INTERVAL_SEC)
+        raise QueryTimeoutError(request_id, time.perf_counter() - poll_started)
 
     assert poll_response is not None
     all_rows = _rows_from_investigation_response(poll_response)
     meta = poll_response.get("meta") or {}
 
+    page_errors: list[str] = []
     if ds.pagination.enabled:
         pages = _num_pages(meta)
         fetch_pages = min(pages, ds.pagination.max_pages)
@@ -174,37 +177,43 @@ async def _run_investigation_source(
                 ),
                 return_exceptions=True,
             )
-            for resp in extra_pages:
+            for page_num, resp in enumerate(extra_pages, start=2):
                 if isinstance(resp, BaseException):
+                    page_errors.append(f"page {page_num}: {resp}")
                     continue
                 chunk = _rows_from_investigation_response(resp)
                 if chunk:
                     all_rows.extend(chunk)
 
-    return all_rows, {
+    out_meta: dict[str, Any] = {
         "request_id": request_id,
         "duration_ms": round((time.perf_counter() - t0) * 1000.0, 2),
     }
+    if page_errors:
+        out_meta["warning"] = (
+            f"partial results — {len(page_errors)} page fetch(es) failed: "
+            + "; ".join(page_errors)
+        )
+    return all_rows, out_meta
 
 
-def _coerce_for_annotation(raw: str, ann: Any) -> Any:
-    if ann is inspect.Parameter.empty:
-        return raw
-    if ann is int:
-        try:
-            return int(raw)
-        except ValueError:
-            return int(float(raw))
-    if ann is bool:
-        return str(raw).lower() in ("1", "true", "yes", "on")
-    if ann is str:
-        return raw
-    args = getattr(ann, "__args__", None)
-    if args:
-        for a in args:
-            if a is type(None):
-                continue
-            return _coerce_for_annotation(raw, a)
+_INT_RE = re.compile(r"-?\d+")
+
+
+def _coerce_argument(raw: str) -> Any:
+    """Best-effort literal coercion for a rendered YAML argument.
+
+    The REST helpers all take ``**params`` (and under
+    ``from __future__ import annotations`` signature annotations are strings
+    anyway), so there is no annotation to coerce against — send integers and
+    booleans as their natural types, leave everything else as the rendered
+    string.
+    """
+    s = raw.strip()
+    if _INT_RE.fullmatch(s):
+        return int(s)
+    if s.lower() in ("true", "false"):
+        return s.lower() == "true"
     return raw
 
 
@@ -220,14 +229,25 @@ async def _run_vectra_rest(
         )
     method = getattr(client, ds.client_method)
     sig = inspect.signature(method)
+    accepts_var_kwargs = any(
+        p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+    )
+    named_params = {
+        p.name
+        for p in sig.parameters.values()
+        if p.kind
+        in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+        and p.name != "self"
+    }
     kwargs: dict[str, Any] = {}
-    for pname, param in sig.parameters.items():
-        if pname in ("self", "args", "kwargs"):
-            continue
-        if pname not in ds.arguments:
-            continue
-        rendered = _jinja_args.from_string(ds.arguments[pname]).render(**ctx)
-        kwargs[pname] = _coerce_for_annotation(rendered, param.annotation)
+    for aname, tmpl in ds.arguments.items():
+        if aname not in named_params and not accepts_var_kwargs:
+            raise ValueError(
+                f"argument {aname!r} is not accepted by "
+                f"client_method {ds.client_method!r}"
+            )
+        rendered = _jinja_args.from_string(tmpl).render(**ctx)
+        kwargs[aname] = _coerce_argument(rendered)
     result = await method(**kwargs)
     meta_out = {
         "request_id": None,
@@ -250,6 +270,7 @@ async def _run_one_source(
         "row_count": 0,
         "duration_ms": 0.0,
         "error": None,
+        "warning": None,
         "request_id": None,
     }
     try:
@@ -268,6 +289,7 @@ async def _run_one_source(
     sm["row_count"] = len(rows)
     sm["duration_ms"] = m.get("duration_ms", 0.0)
     sm["request_id"] = m.get("request_id")
+    sm["warning"] = m.get("warning")
     return ds.id, rows, sm
 
 

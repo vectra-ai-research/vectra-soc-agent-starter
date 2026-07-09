@@ -132,23 +132,17 @@ fi
 # ----------------------------------------------------------------------
 section "5. Bash scripts parse"
 
-bash_errors=0
-find skills -name '*.sh' -type f -print | while IFS= read -r script; do
-  if ! bash -n "$script" 2>/dev/null; then
-    printf 'FAIL: syntax error in %s\n' "$script"
-    bash -n "$script" || true
-    exit 1
-  fi
-done
-# the `while` runs in a subshell on POSIX — re-check overall result:
-if find skills -name '*.sh' -type f -exec bash -n {} \; 2>/tmp/check.sh.errs; [ -s /tmp/check.sh.errs ]; then
+# Collect all bash -n errors in one pass; a fixed /tmp path would collide
+# between concurrent CI runs, so use mktemp.
+bash_errs="$(mktemp)"
+find skills -name '*.sh' -type f -exec bash -n {} \; 2>"$bash_errs"
+if [ -s "$bash_errs" ]; then
   fail "one or more *.sh under skills/ failed bash -n"
-  cat /tmp/check.sh.errs
-  bash_errors=1
+  cat "$bash_errs"
+else
+  ok "all *.sh under skills/ pass bash -n"
 fi
-[ "$bash_errors" = "0" ] && ok "all *.sh under skills/ pass bash -n"
-
-rm -f /tmp/check.sh.errs
+rm -f "$bash_errs"
 
 # ----------------------------------------------------------------------
 printf '\n'

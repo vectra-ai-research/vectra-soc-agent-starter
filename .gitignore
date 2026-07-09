@@ -17,5 +17,8 @@ out/
 .claude/
 .agents/
 
+# Claude Code plugin lockfile — machine-local
+skills-lock.json
+
 # Persona routing tests live in the private repo
 skills/tests/

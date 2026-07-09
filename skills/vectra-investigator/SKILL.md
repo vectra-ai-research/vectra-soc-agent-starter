@@ -224,14 +224,17 @@ questions and jump straight to the named workflow** with the listed
 default scope. If the analyst supplies arguments, override the
 corresponding default.
 
-Use the prefix `vectra` before each command to route properly to the right SKILL.
+Every command works with or without the `vectra` prefix (`vectra
+priorities` and `priorities` route identically). Use the prefix when a
+bare phrase could collide with other tooling or read as ordinary
+conversation.
 
 | Phrase | Workflow | Default scope |
 |--------|----------|---------------|
 | `vectra priorities` / `shift start` / `queue` / `triage` | [Queue Triage](references/workflow-queue-triage.md) | Top 5 active entities by urgency, all wired tenants, last 24 h |
 | `vectra entity <name-or-id>` | [Entity Deep-Dive](references/workflow-entity-deep-dive.md) | Named host or account, all open detections, last 7 d |
 | `vectra detection <id>` | [Single-Detection Pivot](references/workflow-detection-pivot.md) | Named detection + its entity context + matching `playbook-<category>.md`, detection's own time window |
-| `vectra hunt <url-or-ioc-or-actor>` | [TI-Driven Hunt](references/workflow-ti-hunt.md) | Last 30 d, all wired tenants |
+| `vectra hunt <url-or-ioc-or-actor>` | [TI-Driven Hunt](references/workflow-ti-hunt.md) | Last 14 d for network metadata (Vectra retention ceiling — see `vectra-hunt` Limitations), up to 30 d for cloud tables, all wired tenants. State the effective window in the hunt report. |
 | `vectra report <name>` | [Canned Report](references/workflow-canned-report.md) | Last 24 h, MCP channel unless `vectra-reports` Python venv is wired. **`report` with no name → list the catalogue and ask the analyst to pick — do not default to a generic report.** |
 | `vectra pcap <detection-id>` | [Network PCAP Triage](references/workflow-pcap-triage.md) | Named network detection, full capture window, structured `tshark` pass |
 

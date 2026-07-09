@@ -50,6 +50,12 @@ The **only** things that genuinely vary per client are:
   git clone https://github.com/vectra-ai-research/vectra-soc-agent-starter.git
   cd vectra-soc-agent-starter
   ```
+- **Windows only:** the repo uses symlinks
+  (`skills/vectra-reports-mcp/{definitions,reference}` point into
+  `vectra-reports/`). Enable symlink support *before* cloning —
+  turn on Windows Developer Mode, then
+  `git clone -c core.symlinks=true …` — otherwise the
+  `vectra-reports-mcp` skill checks out as broken text files.
 
 ---
 

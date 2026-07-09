@@ -14,3 +14,25 @@ jobs:
 
       - name: Run pre-ship checks
         run: bash skills/scripts/check.sh
+
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: skills/vectra-reports
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install report engine (with dev extras)
+        run: uv sync --extra dev
+
+      - name: Byte-compile engine and scripts
+        run: uv run python -m compileall -q engine scripts
+
+      - name: Validate report definitions
+        run: uv run python scripts/validate.py
+
+      - name: Run executor smoke tests
+        run: uv run pytest -q tests
