@@ -1,6 +1,6 @@
 # Progressive-Load Manifest — `vectra-investigator/references/`
 
-This skill's `references/` tree is ~13 files / ~2K lines. **Hosts must
+This skill's `references/` tree is ~14 files / ~2K lines. **Hosts must
 not bundle / load all of them up-front.** Use the table below to load
 only the references the current workflow needs; everything else stays
 on disk until something references it.
@@ -28,6 +28,7 @@ When the orchestrator picks a workflow, load the matching row's files
 | Ad-Hoc Investigation Query | `workflow-ad-hoc-query.md` (then routes into `vectra-hunt` references) |
 | Canned Report | `workflow-canned-report.md` (then routes into `vectra-reports*` skills) |
 | Network PCAP Triage | `workflow-pcap-triage.md` (then routes into `vectra-pcap`) |
+| Bulk Detection Consolidation | `workflow-bulk-consolidation.md` |
 
 ## Playbook load (within Single-Detection Pivot or Entity Deep-Dive)
 

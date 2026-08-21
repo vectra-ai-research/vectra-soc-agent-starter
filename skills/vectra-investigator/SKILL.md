@@ -1,6 +1,6 @@
 ---
 name: vectra-investigator
-description: Primary Vectra AI tier-1 SOC analyst orchestrator. Routes requests to the right workflow (queue triage, entity deep-dive, single-detection pivot, TI hunt, ad-hoc investigation, canned report, PCAP triage), runs detection-category playbooks (Exfiltration, Lateral Movement, etc.), and lands a four-outcome verdict (BTP / TP-Low / TP-High / Need-more-data). Delegates to vectra-hunt for SQL recipes, vectra-reports or vectra-reports-mcp for dashboards, vectra-pcap for packet captures, and virustotal for IOC reputation. Use when the user says triage the queue, investigate an entity, detection, or alert, asks if a detection or alert is real, wants help understanding an alert they received, requests priorities or shift start, or any open-ended SOC workflow starting inside Vectra.
+description: Primary Vectra AI tier-1 SOC analyst orchestrator. Routes requests to the right workflow (queue triage, entity deep-dive, single-detection pivot, TI hunt, ad-hoc investigation, canned report, PCAP triage, bulk detection consolidation), runs detection-category playbooks (Exfiltration, Lateral Movement, etc.), and lands a four-outcome verdict (BTP / TP-Low / TP-High / Need-more-data) or a batch triage-rule/group recommendation. Delegates to vectra-hunt for SQL recipes, vectra-reports or vectra-reports-mcp for dashboards, vectra-pcap for packet captures, and virustotal for IOC reputation. Use when the user says triage the queue, investigate an entity, detection, or alert, asks if a detection or alert is real, wants help understanding an alert they received, requests priorities or shift start, asks whether a batch of similar detections can be authorized together, or any open-ended SOC workflow starting inside Vectra.
 ---
 
 # Vectra Investigator — Tier 1 SOC Workflow Orchestrator
@@ -28,6 +28,7 @@ per-workflow load set (progressive load is **mandatory**).
 | Workflow 5 — Ad-Hoc Investigation Query | [`references/workflow-ad-hoc-query.md`](references/workflow-ad-hoc-query.md) |
 | Workflow 6 — Canned Report | [`references/workflow-canned-report.md`](references/workflow-canned-report.md) |
 | Workflow 7 — Network PCAP Triage | [`references/workflow-pcap-triage.md`](references/workflow-pcap-triage.md) |
+| Workflow 8 — Bulk Detection Consolidation | [`references/workflow-bulk-consolidation.md`](references/workflow-bulk-consolidation.md) |
 | Best practices + common pitfalls | [`references/best-practices.md`](references/best-practices.md) |
 
 The data and SQL detail is delegated to other skills:
@@ -91,6 +92,9 @@ The **Vectra MCP server** must be connected. Required tools:
 | `list_assignments` / `list_assignments_for_user` / `get_assignment_for_entity` | See which entities are already assigned / under investigation |
 | `get_detection_details` / `get_detection_summary` | Drill into a single detection |
 | `get_host_details` / `get_account_details` | Drill into entity context |
+| `list_triage_rules` / `list_groups` | See what triage rules and authorized-entity groups already exist (Bulk Detection Consolidation) |
+| `add_member_to_group` | Propose adding a shared value (IP/domain/host/account) to an existing group — draft only, human-in-the-loop |
+| `close_detection` | Propose closing a detection with a reason — draft only, human-in-the-loop |
 | `run_investigation` | Execute Investigation Query SQL pivots (used via `vectra-hunt`) |
 | `get_investigation_results` | Page through SQL results |
 | `get_investigation_schema` / `get_investigation_sql_reference` | Inspect tables / SQL grammar before authoring queries |
@@ -205,6 +209,7 @@ checklist that names the right sub-skill or MCP tool at every step.
 | "Did host X talk to evil.com last night?" / "check CloudTrail" / any narrow ad-hoc log / metadata question | Ad-Hoc Investigation Query | [`references/workflow-ad-hoc-query.md`](references/workflow-ad-hoc-query.md) |
 | **User explicitly names a canned report** ("run the C2 beacon report", "render the top-talkers dashboard") — *no name = ask, never infer* | Canned Report | [`references/workflow-canned-report.md`](references/workflow-canned-report.md) |
 | "Pull the PCAP for detection `<id>`" / "show me the raw packets" | Network PCAP Triage | [`references/workflow-pcap-triage.md`](references/workflow-pcap-triage.md) |
+| "Do any of these share a pattern worth handling together?" / "can we bulk-authorize this instead of one at a time?" / a large cluster of similar low-urgency detections | Bulk Detection Consolidation | [`references/workflow-bulk-consolidation.md`](references/workflow-bulk-consolidation.md) |
 
 Every workflow ends in a verdict — apply the rubric and write-up
 template in
