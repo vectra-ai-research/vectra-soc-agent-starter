@@ -50,19 +50,47 @@ pick the top-N entities, render verdicts.
 
 ## Step 1 — Pull the queue
 
+**One call, both entity types:**
+
 ```
-list_entities(state="active", ordering="-priority", page_size=25)
+list_entities(state="active", ordering="-urgency_score", limit=25)
 ```
+
+Leave `entity_type` unset. The underlying `type` filter is optional, so
+omitting it returns hosts **and** accounts together — which is what a
+queue sweep wants, since a kill chain routinely spans both (a compromised
+account driving a compromised host). Set `entity_type` only to deliberately
+restrict to one.
 
 Or if the user prefers detection-centric:
 
 ```
-list_detections_with_basic_info(state="active", ordering="-threat", page_size=25)
+list_detections_with_basic_info(state="active", ordering="last_timestamp", limit=25)
 ```
+
+**Leave `is_prioritized` unset** unless the user specifically asked for
+already-flagged entities. It is a manual/platform flag, unrelated to
+`urgency_score`, and setting it silently drops every non-flagged entity —
+which breaks exactly the "walk the whole queue" and "lowest urgency" asks
+this workflow exists for. For a **lowest-urgency** sweep, flip the ordering
+to ascending: `ordering="urgency_score"`.
+
+Note `list_detections_with_basic_info` has no severity/threat-based
+`ordering` — only `created_datetime`, `last_timestamp`, or `id`. If the
+ask is genuinely about severity ("most severe", "highest threat"), go
+entity-first instead (urgency_score is an entity-level rollup, not a
+detection field) and pull each entity's detections from there.
 
 Always filter for **active / unresolved** state. Triaged-but-still-firing
 detections are surfaced via the entity score, not by re-walking the
 detection list.
+
+Prefer `list_detections_with_basic_info` (or `list_detection_ids`) for this
+broad pull — they return compact summaries. `list_detections_with_details`
+is for a small, already-narrowed set of IDs; it now excludes the two
+heaviest fields (`process_context_data`, `grouped_details`) by default, so
+it is no longer the oversized-response hazard it once was, but it is still
+the wrong shape for an initial sweep.
 
 In a multi-tenant deployment, run this per tenant — see
 [`mental-model.md`](mental-model.md) §4.
