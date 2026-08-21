@@ -55,7 +55,10 @@ WHERE dt > date_add('day', -{days_back}, current_date)
   `id.orig_h`, `id.resp_h`, `id.orig_p`, `id.resp_p`.
 - Struct fields use dot notation: `certificate.subject`,
   `status.error_code`, `alert.severity`.
-- Table names MUST use `._all` suffix: `network.dns._all`.
+- Table names: `._all` suffix is optional — bare names (`network.dns`)
+  and `._all`-suffixed names (`network.dns._all`) are equivalent
+  (confirmed live). The recipes below keep the `._all` suffix for
+  clarity, but you don't need to add it when writing new queries.
 - Timestamp field is `timestamp`, NOT `ts` (with table-specific
   exceptions — see [`table-gotchas.md`](table-gotchas.md)).
 
@@ -72,18 +75,41 @@ WHERE dt > date_add('day', -{days_back}, current_date)
 
 ---
 
+## Rate limit (REQUIRED reading before batching queries)
+
+**Hard limit: 5 `run_investigation` submissions per minute.** This
+is an API-enforced ceiling, not a soft guideline — submitting more
+than 5 in a parallel batch will trip `429 Too Many Requests` on the
+excess calls. When a hunt needs more than ~4 queries, submit them
+sequentially with a short pause between batches rather than firing
+them all in parallel.
+
+---
+
 ## Supported SQL functions
 
 - **Aggregates:** COUNT, MAX, MIN, SUM, AVG, STDDEV, STDDEV_SAMP,
   STDDEV_POP
-- **String:** LOWER, UPPER, LENGTH, ABS, CONCAT, CONTAINS, COALESCE
+- **String:** LOWER, UPPER, LENGTH, ABS, CONCAT, CONTAINS, COALESCE,
+  SUBSTR, REPLACE, REVERSE, SPLIT, SPLIT_PART, STRPOS, NULLIF, TRIM
 - **Time:** DATE, NOW, DATE_ADD, DATE_DIFF,
   FROM_ISO8601_TIMESTAMP, FROM_UNIXTIME, TO_UNIXTIME
 - **Regex:** REGEXP_COUNT, REGEXP_EXTRACT_ALL, REGEXP_EXTRACT,
   REGEXP_LIKE, REGEXP_POSITION, REGEXP_REPLACE, REGEXP_SPLIT
 - **Casting:** TRY_CAST, CAST
+- **Conditional:** CASE WHEN
 - **Arrays:** ANY_MATCH, ALL_MATCH, DISTINCT, ARRAY_AGG, CARDINALITY
-- **Multi-table:** UNION ALL supported. JOIN is NOT supported.
+- **Aggregation extras:** COUNT(DISTINCT ...), APPROX_DISTINCT,
+  APPROX_PERCENTILE (use with GROUP BY / HAVING as needed)
+- **JSON:** JSON_PARSE, JSON_ARRAY_LENGTH, JSON_ARRAY_CONTAINS
+  (confirmed live). JSON_EXTRACT, JSON_EXTRACT_SCALAR, JSON_FORMAT,
+  JSON_SIZE are documented as expected to work but not independently
+  confirmed — verify with a small test query before relying on them
+  in a hunt.
+- **Multi-table:** `UNION` and `UNION ALL` supported across any
+  tables (confirmed live, not just same-table pairs). Subqueries
+  (`WHERE x IN (SELECT ...)`) are supported (confirmed live). `JOIN`
+  is NOT supported — use `UNION`/subqueries instead.
 
 ---
 

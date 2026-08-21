@@ -17,7 +17,7 @@ file before authoring SQL against any of these tables.
 | `network.dhcp._all` | No `id` struct. `orig_hostname` is plain STRING. No `local_orig` / `local_resp`. |
 | `network.match._all` | No `uid`. `alert.severity`: `1` = Critical, `2` = Major, `3` = Minor. |
 | `network.radius._all` | `result` is STRING (e.g. `'Access-Accept'`). Schema unvalidated against live data — confirm field shapes before relying on them. |
-| `network.smtp._all` | Schema unvalidated against live data — confirm field shapes before relying on them. |
+| `network.smtp` | **Does not exist.** Confirmed live (`TABLE_NOT_FOUND`) — not in the current platform's `network.*` table list. Do not query it; use `m365.exchange` for email-based hunts instead. |
 | `network.ssh._all` | No `auth_success` / `auth_attempts` fields — infer from session shape instead. |
 
 ---
@@ -27,6 +27,7 @@ file before authoring SQL against any of these tables.
 | Table | Gotcha |
 |-------|--------|
 | `azurecp.operations._all` | Day-level `dt` only — use the day-level partitioning recipe in [`query-construction.md`](query-construction.md). `identity` / `properties` are JSON blobs. |
-| `entra.*` | `_flat`-suffix fields are JSON strings — use `CONTAINS` rather than struct dot-notation. |
-| `m365.*` | `user_id` = UPN. `_flat`-suffix fields are JSON strings — use `CONTAINS`. |
+| `entra.signins` | Has `status_flat`, `device_detail_flat`, `location_flat` — JSON strings, use `CONTAINS` rather than struct dot-notation on these. Field is `risk_level_during_sign_in` (with the underscore), not `risk_level_during_signin`. |
+| `entra.directoryaudits` | Has `initiated_by_flat` only. **No** `target_resources_flat` — `target_resources` is an ARRAY of structs with no flat companion; use `ANY_MATCH`/dot-notation on a resolved element, not a `_flat` field (it doesn't exist and returns `COLUMN_NOT_FOUND`). |
+| `m365.*` | `user_id` = UPN. Individual tables have their own `_flat`-suffix companion fields (e.g. `m365.exchange.item_flat`, `.parameters_flat`) — don't assume every struct field has one; check the schema reference per table before relying on `_flat`. |
 | `aws.cloudtrail._all` | `user_identity` is a struct. `vectra.entity.resolved_identity` is plain VARCHAR (use this when you want a single-string identity column). |

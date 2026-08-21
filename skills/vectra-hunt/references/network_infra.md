@@ -1,5 +1,5 @@
 # Network Infrastructure Investigation Recipes
-Covers: SSH, SMTP, DHCP, RADIUS, Beacon, IDS Match
+Covers: SSH, DHCP, RADIUS, Beacon, IDS Match
 
 ## SSH — `network.ssh._all`
 
@@ -57,54 +57,14 @@ ORDER BY timestamp DESC LIMIT {limit}
 
 ---
 
-## SMTP — `network.smtp._all`
-
-**Warning:** Schema from PDF only, unvalidated.
-
-### 1. Host SMTP Activity
-```sql
-SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
-       mailfrom, rcptto, subject, helo, tls, fuids, uid
-FROM network.smtp._all
-WHERE dt > date_add('hour', -{hours_back}, now())
-  AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND id.orig_h = '{src_ip}'
-ORDER BY timestamp DESC LIMIT {limit}
-```
-
-### 2. Hunt by Sender
-```sql
-SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
-       mailfrom, rcptto, subject, helo, tls, uid
-FROM network.smtp._all
-WHERE dt > date_add('hour', -{hours_back}, now())
-  AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(LOWER(mailfrom), LOWER('{sender}'))
-ORDER BY timestamp DESC LIMIT {limit}
-```
-
-### 3. Hunt by Recipient — Data exfiltration via email
-```sql
-SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
-       mailfrom, rcptto, subject, helo, tls, uid
-FROM network.smtp._all
-WHERE dt > date_add('hour', -{hours_back}, now())
-  AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(LOWER(rcptto), LOWER('{recipient}'))
-ORDER BY timestamp DESC LIMIT {limit}
-```
-
-### 4. Unencrypted SMTP (tls = false)
-```sql
-SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
-       mailfrom, rcptto, subject, helo, tls, uid
-FROM network.smtp._all
-WHERE dt > date_add('hour', -{hours_back}, now())
-  AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND tls = false
-  -- Optional: AND id.orig_h = '{src_ip}'
-ORDER BY timestamp DESC LIMIT {limit}
-```
+> **`network.smtp` does not exist.** Confirmed live
+> (`422 INVALID_DATASOURCE` / `TABLE_NOT_FOUND`) — the current
+> platform schema reference's "Available Tables" list for
+> `network.*` does not include `smtp`. Do not query it; there is no
+> SMTP-specific table in Investigation Query today. If email-based
+> exfiltration needs hunting, use `m365.exchange` (mailbox
+> forwarding rules) instead — see
+> [`cloud_investigations.md`](cloud_investigations.md).
 
 ---
 
