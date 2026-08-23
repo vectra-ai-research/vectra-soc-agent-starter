@@ -118,6 +118,54 @@ def copy_skill(src: Path, dst: Path) -> None:
     )
 
 
+def check_conflict_markers(staged: Path) -> list[str]:
+    """Refuse to ship an unresolved merge.
+
+    A committed conflict marker inside a SKILL.md is invisible to every other
+    check here and to the agent's own loader -- it just reads as broken prose
+    in the middle of, in the worst case, the tool table.
+    """
+    hits = []
+    for f in staged.rglob("*"):
+        if not f.is_file() or f.suffix not in {".md", ".yaml", ".yml", ".json"}:
+            continue
+        text = f.read_text(errors="ignore")
+        for n, line in enumerate(text.splitlines(), 1):
+            if line.startswith(("<<<<<<< ", ">>>>>>> ")) or line.rstrip() == "=======":
+                hits.append(f"{f.relative_to(staged)}:{n}")
+    return hits
+
+
+def install_agents_md(staged: Path, agents: Path, skills: list[str]) -> None:
+    """Put AGENTS.md where a skill can actually reach it.
+
+    Copying it only to the bundle root is not enough. Hosts extract plugin
+    skills into a skills-only location, so `../../AGENTS.md` from
+    skills/<name>/SKILL.md resolves outside anything that got installed and the
+    six safety guardrails silently disappear. Observed in a clean-chat test on
+    2026-08-23: the agent reported the file did not exist and fell back to the
+    host's generic rules, losing "preserve evidence", "escalate don't act" and
+    "uncertainty escalates".
+
+    So: copy AGENTS.md into every shipped skill, and rewrite each reference to
+    it by the referring file's depth. Root copy stays for hosts that do
+    preserve the bundle layout.
+    """
+    shutil.copyfile(agents, staged / "AGENTS.md")
+    for name in skills:
+        skill_root = staged / "skills" / name
+        shutil.copyfile(agents, skill_root / "AGENTS.md")
+        for md in skill_root.rglob("*.md"):
+            depth = len(md.relative_to(skill_root).parts) - 1
+            text = md.read_text()
+            # skills/<name>/x.md needs "AGENTS.md";
+            # skills/<name>/references/x.md needs "../AGENTS.md"; etc.
+            replacement = ("../" * depth) + "AGENTS.md"
+            new = re.sub(r"(?:\.\./)+AGENTS\.md", replacement, text)
+            if new != text:
+                md.write_text(new)
+
+
 def check_dangling_links(staged: Path, shipped: list[str]) -> list[str]:
     """Report cross-skill links pointing at skills not in this bundle."""
     warnings = []
@@ -226,18 +274,23 @@ def main() -> int:
             fail(f"skill has no SKILL.md: {src}")
         copy_skill(src, staged / "skills" / name)
 
-    # The guardrails live here; see module docstring.
+    # The guardrails live here; see install_agents_md.
     agents = REPO_ROOT / "AGENTS.md"
     if not agents.is_file():
         fail("AGENTS.md missing from repo root -- the skills reference it for "
              "the safety guardrails and the bundle would ship without them")
-    shutil.copyfile(agents, staged / "AGENTS.md")
+    install_agents_md(staged, agents, args.skills)
 
     mcp = build_mcp_json(args)
     if mcp is not None:
         (staged / ".mcp.json").write_text(json.dumps(mcp, indent=2) + "\n")
 
     # ---- validate --------------------------------------------------------
+    conflicts = check_conflict_markers(staged)
+    if conflicts:
+        fail("unresolved merge conflict markers in the bundle:\n       "
+             + "\n       ".join(conflicts))
+
     leaks = scan_for_credentials(staged)
     if leaks:
         fail("possible credentials in staged bundle: " + ", ".join(leaks))

@@ -145,7 +145,23 @@ fi
 rm -f "$bash_errs"
 
 # ----------------------------------------------------------------------
-section "6. Plugin source is well formed"
+section "6. No unresolved merge conflicts"
+
+# A committed conflict marker in a SKILL.md is invisible to every other check
+# and to the agent's loader — it just reads as broken prose, potentially in the
+# middle of the tool table. This shipped once (2026-08-23) and was only caught
+# by a human reading the skill in a clean chat.
+conflict_hits="$(grep -rn -E '^(<<<<<<< |>>>>>>> |=======$)' \
+  skills AGENTS.md plugin 2>/dev/null || true)"
+if [ -n "$conflict_hits" ]; then
+  fail "unresolved merge conflict markers found"
+  printf '%s\n' "$conflict_hits"
+else
+  ok "no conflict markers under skills/, plugin/ or AGENTS.md"
+fi
+
+# ----------------------------------------------------------------------
+section "7. Plugin source is well formed"
 
 # plugin/ holds the source the bundler assembles into an installable
 # archive. A malformed manifest fails at install time with little
