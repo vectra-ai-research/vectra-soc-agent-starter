@@ -93,6 +93,78 @@ Every BTP should leave behind a one-liner the next analyst can read in
 > `\\fileserver\C$` nightly between 02:00–03:00 UTC. Suppression
 > scope: this host + SMB Files destination = fileserver only.
 
+"Leave behind" means **on the entity in Vectra**, not only in the chat
+reply — see [Persisting the verdict](#persisting-the-verdict) below. A
+baseline that lives in a transcript is invisible to the next analyst and
+to your own next run.
+
+---
+
+## Persisting the verdict
+
+A verdict that exists only in a chat reply is gone when the session
+ends. The next analyst — and your own next run against the same
+entity — starts from zero and re-does the work. Every instruction in
+this skill to "document the baseline", "note the user + business
+reason", or "document the mgmt tool" has one destination:
+`create_entity_note`.
+
+### Read before you write
+
+`create_entity_note` **appends**. Each call adds a new note, so
+re-triaging an entity stacks near-identical entries and degrades the
+history into noise. Always read what is already there first:
+
+```
+list_entities(name="<entity>", fields="id,name,note,notes,note_modified_by,note_modified_timestamp")
+```
+
+Then decide:
+
+| Existing state | Do |
+|---|---|
+| No prior note | Propose a new note |
+| Prior note, same conclusion, nothing new | **Propose nothing.** Say so in the write-up |
+| Prior note, your evidence changes it | Propose a note that **supersedes** it explicitly — quote the prior conclusion and say what changed |
+| Prior note from another analyst, still valid | Leave it. Add only genuinely new evidence, and attribute the original |
+
+### Propose, never write
+
+Writing a note is a mutation, and guardrail 2 in
+[`../../../AGENTS.md`](../../../AGENTS.md) names notes specifically:
+present it as a draft for approval. State the exact call and wait.
+
+```
+create_entity_note(
+  entity_id=<n>,
+  entity_type="host" | "account",
+  note="<the text below>"
+)
+```
+
+### What the note says
+
+The note is for a human skimming an entity six weeks from now, not for
+a machine. One paragraph, no markdown, self-contained — it must make
+sense without the transcript that produced it.
+
+Include: the verdict, the behaviour, the evidence that decided it, the
+date and analyst, and the disposition. Omit: pivot narration, tool
+names, anything a reader cannot act on.
+
+> `BTP 2026-08-23 (agent-assisted triage).` Smash and Grab to
+> `\\fileserver\C$`, 02:14–02:51 UTC nightly, source is the Veeam
+> backup agent — confirmed against the backup schedule and the
+> `backup-server` tag. Not malicious in this environment. Triage rule
+> proposed, scoped to (host=BACKUP-AGENT-04, type=Smash and Grab,
+> dst=fileserver). Re-open if the destination or window changes.
+
+For **TP-High**, the note is the IR handoff's durable record and should
+name what was escalated, to whom, and when. For **NMD**, record the
+specific gap and the next pivot, so the next analyst resumes rather
+than restarts — this is the case where a persisted note saves the most
+duplicated effort.
+
 ---
 
 ## Need-more-data is a valid outcome
@@ -136,6 +208,11 @@ entity context (tags / groups / key-asset / change windows)>.
   service>)
 - Escalation (TP-High only): <to whom, with what summary>
 - Next pivots (NMD only): <EDR / SIEM / identity / ticketing>
+- Proposed note: <the exact create_entity_note call, or "none — prior
+  note still accurate">
+
+**Existing notes checked:** <yes — none found / yes — superseding note
+of <date> / yes — leaving <analyst>'s note intact>
 
 **Gaps Vectra cannot answer:** <e.g. file hashes, registry keys,
 process command lines, agent-less hosts, encrypted east-west without a

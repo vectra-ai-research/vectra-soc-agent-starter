@@ -378,6 +378,8 @@ Disposition:
   - Triage rule scope (if BTP): (source_host=<id>, detection_type=<type>, dst_set=<...>) OR (account=<UPN>, detection_type=<type>, target=<service>)
   - Tier 2 escalation note (if TP-High): <one paragraph for IR handoff>
   - Containment recommendation (if TP-High): <isolate host? disable account? rotate KRBTGT? reset service-account passwords?>
+  - Proposed entity note: <create_entity_note call, or "none — prior note stands">
+    (read existing notes first; see verdict-framework.md § Persisting the verdict)
 ```
 
 > The full per-entity verdict template (with multi-tenant scope, key-asset

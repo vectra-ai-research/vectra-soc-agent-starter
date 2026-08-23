@@ -91,6 +91,8 @@ The **Vectra MCP server** must be connected. Required tools:
 | `list_assignments` / `list_assignments_for_user` / `get_assignment_for_entity` | See which entities are already assigned / under investigation |
 | `get_detection_details` / `get_detection_summary` | Drill into a single detection |
 | `get_host_details` / `get_account_details` | Drill into entity context |
+| `list_entities` with `fields="note,notes,note_modified_by,note_modified_timestamp"` | Read an entity's existing notes **before** proposing a new one |
+| `create_entity_note` | Propose persisting a verdict to the entity — draft only, human-in-the-loop. Appends, so read existing notes first ([verdict-framework.md](references/verdict-framework.md#persisting-the-verdict)) |
 | `run_investigation` | Execute Investigation Query SQL pivots (used via `vectra-hunt`) |
 | `get_investigation_results` | Page through SQL results |
 | `get_investigation_schema` / `get_investigation_sql_reference` | Inspect tables / SQL grammar before authoring queries |
