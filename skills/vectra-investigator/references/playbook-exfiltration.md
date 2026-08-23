@@ -278,10 +278,13 @@ Reasoning:
   - <co-occurring or absent context>
 
 Disposition:
-  - Action: <assign / escalate / close as BTP>
+  - Acknowledgement: <create_assignment — starts metrics timers, not a handoff>
+  - External owner (if TP): <set_detection_workflow_state(detection_ids=[<ids>],
+    external_reference_id="<TICKET>", investigation_status="escalated")>
   - Triage rule scope (if BTP): (host=<id>, detection_type=<type>, dst=<ip|domain>)
   - Tier 2 escalation note (if TP-High): <one paragraph for IR handoff>
-  - Proposed entity note: <create_entity_note call, or "none — prior note stands">
+  - Proposed entity note: <the literal create_entity_note call, filled in, or
+    "none — prior note stands">, then ask whether to write it
     (read existing notes first; see verdict-framework.md § Persisting the verdict)
 ```
 

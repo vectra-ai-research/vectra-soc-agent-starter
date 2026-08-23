@@ -197,6 +197,30 @@ specific gap and the next pivot, so the next analyst resumes rather
 than restarts — this is the case where a persisted note saves the most
 duplicated effort.
 
+### Emit the call, then stop and ask
+
+A proposal the analyst has to translate into a tool call is not a proposal.
+Write the **literal call**, filled in — no placeholders — and then **ask
+whether to write it**, as the last thing you say. Observed failure: a verdict
+described the note in prose, then closed by offering PCAP triage and RTR
+instead, so the note dangled and nothing was ever written.
+
+```
+create_entity_note(
+  entity_id=105315,
+  entity_type="host",
+  note="TP-High 2026-08-23 (agent-assisted triage). Meterpreter-style C2 beacon to 172.217.23.129 followed by AD/RPC/LDAP recon, a weak-cipher Kerberoasting SPN request against fguillot181, and lateral movement to Deacon-desktop, all under account piper, 2026-08-14 10:00-12:58 UTC. SPN-query recon has recurred daily since, most recently 2026-08-23. Escalated to IR."
+)
+```
+
+Then: **"Write this note?"** — and wait. Do not stack other offers in front of
+it; the mutation you have prepared is the one that needs a decision. Offer
+further pivots only after it is resolved, or if the answer is no.
+
+Same rule for every other proposed mutation: `close_detections`,
+`add_member_to_group`, `set_detection_workflow_state`. Exact arguments, then a
+direct question.
+
 ---
 
 ## Need-more-data is a valid outcome
@@ -223,8 +247,14 @@ the loaded tooling can't see the next pivot. Always:
 **Existing assignment:** <none / analyst>
 
 **Open detections (active only):**
-- <category> — <type> (T:<n> / C:<n>) — <one-line summary>
-- <category> — <type> (T:<n> / C:<n>) — <one-line summary>
+- `<id>` <category> — <type> (T:<n> / C:<n>) — <one-line summary>
+- `<id>` <category> — <type> (T:<n> / C:<n>) — <one-line summary>
+
+Always include the detection **id**. Without it the analyst cannot pivot
+(`/detection <id>`), cannot construct the `close_detections` or
+`set_detection_workflow_state` call the disposition proposes, and cannot cite
+the detection in a ticket. A verdict whose IDs are missing is not actionable,
+however well it reads.
 
 **Behavior observed:** <what Vectra saw + pivot evidence; cite recipe
 files / MCP calls / time windows / key fields>.
@@ -235,16 +265,24 @@ entity context (tags / groups / key-asset / change windows)>.
 **Verdict:** TP-High / TP-Low / BTP / Need-more-data
 
 **Disposition:**
-- Assignment: <propose to assign to <analyst> / leave open>
+- Acknowledgement: <propose create_assignment / already acknowledged /
+  leave open> — this starts the platform's metrics timers; it is **not**
+  a handoff and does not record who owns the work
+- External owner (TP-High / TP-Low): <propose
+  set_detection_workflow_state(detection_ids=[<ids>],
+  external_reference_id="<TICKET>", investigation_status="escalated") —
+  the ticket owns the work, not the Vectra assignment>
 - Triage rule (BTP only): scope = (<host>, <detection_type>, <dst /
   service>)
-- Escalation (TP-High only): <to whom, with what summary>
 - Next pivots (NMD only): <EDR / SIEM / identity / ticketing>
-- Proposed note: <the exact create_entity_note call, or "none — prior
-  note still accurate">
+- Proposed note: <the exact create_entity_note call, filled in, or
+  "none — prior note still accurate">
 
 **Existing notes checked:** <yes — none found / yes — superseding note
 of <date> / yes — leaving <analyst>'s note intact>
+
+**Scope applied:** <full sweep / excluded <n> <reason>, per <the request /
+project instructions / group named by the operator>>
 
 **Gaps Vectra cannot answer:** <e.g. file hashes, registry keys,
 process command lines, agent-less hosts, encrypted east-west without a
