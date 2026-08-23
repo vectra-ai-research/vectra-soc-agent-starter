@@ -94,7 +94,8 @@ The **Vectra MCP server** must be connected. Required tools:
 | `get_host_details` / `get_account_details` | Drill into entity context |
 | `list_triage_rules` / `list_groups` | See what triage rules and authorized-entity groups already exist (Bulk Detection Consolidation) |
 | `add_member_to_group` | Propose adding a shared value (IP/domain/host/account) to an existing group — draft only, human-in-the-loop |
-| `close_detection` | Propose closing a detection with a reason — draft only, human-in-the-loop |
+| `close_detections` | Propose closing one or more detections with a reason (`remediated` / `benign`) — draft only, human-in-the-loop. Takes a list; pass a single-element list to close one. All IDs in a call share the same reason, so group by reason |
+| `reopen_detections` | Propose re-opening previously closed detections — draft only, human-in-the-loop. Re-opening triggers a rescore, so entity urgency may change. Not to be confused with the `open_detections` report data source, which *lists* currently-open detections |
 | `run_investigation` | Execute Investigation Query SQL pivots (used via `vectra-hunt`) |
 | `get_investigation_results` | Page through SQL results |
 | `get_investigation_schema` / `get_investigation_sql_reference` | Inspect tables / SQL grammar before authoring queries |

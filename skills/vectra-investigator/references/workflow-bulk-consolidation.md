@@ -162,9 +162,18 @@ list_groups(group_type="ip")   # or "domain" / "host" / "account", matching the 
 If a rule already covers this `detection_type` and references a group
 of the matching type, adding the new value to that group is
 **strictly preferred** over writing a new rule — see
-[`../../../AGENTS.md`](../../../AGENTS.md) and the `add_member_to_group`
-tool's own description ("the safe/preferred way to authorize
-behavior… rather than editing the rule directly").
+[`../../../AGENTS.md`](../../../AGENTS.md).
+
+Why: editing a triage rule changes the scope of everything that rule
+already covers, whereas adding a member extends an authorization that
+was reviewed when the rule was written. The group edit is narrower,
+easier to audit, and trivially reversible.
+
+Hold this preference **here**, not in the MCP server's tool
+descriptions. The server documents what the API does; which of two
+valid paths a SOC prefers is a judgement call that belongs to the
+reasoning layer, and a different SOC may legitimately manage its rules
+directly.
 
 ---
 
