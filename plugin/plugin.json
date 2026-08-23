@@ -1,0 +1,43 @@
+{
+  "name": "vectra-soc",
+  "description": "Vectra AI tier-1 SOC analyst toolkit — investigator orchestration, metadata hunting, and canned dashboards over the Vectra MCP server, with slash commands for the common shift workflows.",
+  "version": "0.2.0",
+  "author": {
+    "name": "Vectra AI Research"
+  },
+  "homepage": "https://github.com/vectra-ai-research/vectra-soc-agent-starter",
+  "repository": "https://github.com/vectra-ai-research/vectra-soc-agent-starter",
+  "license": "MIT",
+  "keywords": [
+    "vectra",
+    "soc",
+    "security",
+    "threat-hunting",
+    "ndr",
+    "incident-response"
+  ],
+  "skills": "./skills",
+  "commands": "./commands",
+  "mcpServers": "./.mcp.json",
+  "userConfig": {
+    "vectra_base_url": {
+      "type": "string",
+      "title": "Vectra Portal URL",
+      "description": "Your Vectra tenant portal base URL, e.g. https://<tenant>.portal.vectra.ai",
+      "required": true
+    },
+    "vectra_client_id": {
+      "type": "string",
+      "title": "Vectra API Client ID",
+      "description": "OAuth2 client ID for the Vectra API client",
+      "required": true
+    },
+    "vectra_client_secret": {
+      "type": "string",
+      "title": "Vectra API Client Secret",
+      "description": "OAuth2 client secret for the Vectra API client",
+      "sensitive": true,
+      "required": true
+    }
+  }
+}
