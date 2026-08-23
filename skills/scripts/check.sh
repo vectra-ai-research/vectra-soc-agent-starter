@@ -145,6 +145,87 @@ fi
 rm -f "$bash_errs"
 
 # ----------------------------------------------------------------------
+section "6. No unresolved merge conflicts"
+
+# A committed conflict marker in a SKILL.md is invisible to every other check
+# and to the agent's loader — it just reads as broken prose, potentially in the
+# middle of the tool table. This shipped once (2026-08-23) and was only caught
+# by a human reading the skill in a clean chat.
+conflict_hits="$(grep -rn -E '^(<<<<<<< |>>>>>>> |=======$)' \
+  skills AGENTS.md plugin 2>/dev/null || true)"
+if [ -n "$conflict_hits" ]; then
+  fail "unresolved merge conflict markers found"
+  printf '%s\n' "$conflict_hits"
+else
+  ok "no conflict markers under skills/, plugin/ or AGENTS.md"
+fi
+
+# ----------------------------------------------------------------------
+section "7. Plugin source is well formed"
+
+# plugin/ holds the source the bundler assembles into an installable
+# archive. A malformed manifest fails at install time with little
+# diagnostic, so validate it here instead.
+if [ ! -d plugin ]; then
+  ok "no plugin/ directory — skipping"
+else
+  if python3 -c "import json,sys; json.load(open('plugin/plugin.json'))" 2>/dev/null; then
+    ok "plugin/plugin.json parses"
+  else
+    fail "plugin/plugin.json is not valid JSON"
+  fi
+
+  # Required keys. "mcpServers" is deliberately not required — the dev
+  # profile drops it (see scripts/bundle_plugin.py).
+  missing="$(python3 - <<'PY' 2>/dev/null
+import json
+m = json.load(open("plugin/plugin.json"))
+need = ["name", "description", "version", "skills", "commands"]
+print(" ".join(k for k in need if k not in m))
+PY
+)"
+  if [ -n "$missing" ]; then
+    fail "plugin/plugin.json missing required key(s): $missing"
+  else
+    ok "plugin/plugin.json has the required keys"
+  fi
+
+  # An absolute path here would be a dev bundle committed by mistake —
+  # machine-specific and useless to anyone else.
+  if grep -qE '"(command|args)".*"/(Users|home|sessions|tmp|var)/' plugin/*.json plugin/*.template 2>/dev/null; then
+    fail "absolute path in plugin/ — a dev bundle config has been committed"
+  else
+    ok "no absolute paths in plugin/ source"
+  fi
+
+  # Every command needs YAML frontmatter or the host will not register it.
+  cmd_bad=0
+  cmd_n=0
+  for c in plugin/commands/*.md; do
+    [ -f "$c" ] || continue
+    cmd_n=$((cmd_n + 1))
+    if [ "$(head -1 "$c")" != "---" ]; then
+      fail "$c does not start with YAML frontmatter"
+      cmd_bad=$((cmd_bad + 1))
+    fi
+  done
+  if [ "$cmd_n" = "0" ]; then
+    fail "plugin/commands/ contains no *.md"
+  elif [ "$cmd_bad" = "0" ]; then
+    ok "$cmd_n command(s) carry frontmatter"
+  fi
+
+  # The skills reference ../../AGENTS.md for the safety guardrails; the
+  # bundler copies it to the archive root so that resolves. If it is gone,
+  # every bundle silently ships without the guardrails.
+  if [ -f AGENTS.md ]; then
+    ok "AGENTS.md present (bundler copies it to the archive root)"
+  else
+    fail "AGENTS.md missing — bundles would ship without the safety guardrails"
+  fi
+fi
+
+# ----------------------------------------------------------------------
 printf '\n'
 if [ "$failures" -gt 0 ]; then
   printf '%d check(s) failed\n' "$failures" >&2

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "vectra-ai-mcp": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["vectra-ai-mcp-server==__SERVER_VERSION__"],
+      "env": {
+        "VECTRA_BASE_URL": "${user_config.vectra_base_url}",
+        "VECTRA_CLIENT_ID": "${user_config.vectra_client_id}",
+        "VECTRA_CLIENT_SECRET": "${user_config.vectra_client_secret}"
+      }
+    }
+  }
+}
