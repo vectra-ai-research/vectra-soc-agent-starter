@@ -22,3 +22,10 @@ the output. Stay **read-only**. Be honest about coverage gaps: "no hits" ≠
 
 If nothing was supplied, ask what to hunt (report URL, IOC, actor, or a
 specific question).
+
+<!--
+Named vectra-threat-hunt, not vectra-hunt: commands and skills share a
+namespace, and `vectra-hunt` is the skill this command invokes. The colliding
+name did not register at all — no error, the command simply was not there.
+See skills/scripts/check.sh section 8.
+-->
