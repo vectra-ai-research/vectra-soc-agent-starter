@@ -56,6 +56,7 @@ import re
 import shutil
 import sys
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -248,10 +249,17 @@ def main() -> int:
     manifest = json.loads((PLUGIN_SRC / "plugin.json").read_text())
     version = args.plugin_version or manifest["version"]
     if args.profile == "dev":
-        version = f"{version}-dev"
+        # Stamp dev builds so two are distinguishable. Without this every dev
+        # bundle reads 0.2.0-dev, an installer treats a same-version upload as
+        # already-installed, and you end up testing the previous build while
+        # reading the new source. That cost two full test cycles on 2026-08-23.
+        version = f"{version}-dev.{datetime.now(timezone.utc):%Y%m%d%H%M}"
     manifest["version"] = version
     if args.profile == "dev" and not args.server_path:
+        # No server declared, so userConfig would prompt for Vectra credentials
+        # that nothing consumes. The user supplies them to their own connector.
         manifest.pop("mcpServers", None)
+        manifest.pop("userConfig", None)
 
     # ---- stage -----------------------------------------------------------
     staged = args.output / "_staging"
