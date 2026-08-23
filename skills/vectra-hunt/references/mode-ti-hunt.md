@@ -143,6 +143,11 @@ the next-step recommendations.
 - **Defang → refang** before substituting an IOC into SQL.
 - **Batch IOCs of the same type** into one query (`IN (...)` or
   `ANY_MATCH`) to stay within rate limits.
+- **Hard limit: 5 query submissions per minute.** When a hunt needs
+  more than ~4 queries, submit them sequentially with a short pause
+  rather than in one parallel batch — parallel batches of 5+ will
+  trip `429 Too Many Requests` on the excess calls (see
+  [`query-construction.md`](query-construction.md)).
 - **Score each hit:** confirmed (artifact + behavior + Vectra
   detection) > partial (artifact only) > weak (common IOC, low
   confidence).

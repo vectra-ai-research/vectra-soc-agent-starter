@@ -3,7 +3,7 @@ Covers: AWS CloudTrail, Entra ID (Sign-ins + Directory Audits), M365, Azure CP
 
 ## AWS CloudTrail — `aws.cloudtrail._all`
 
-**Key:** user_identity is struct (.arn, .type, .account_id). vectra.entity.resolved_identity is VARCHAR. error_code non-null = failed.
+**Key:** user_identity is struct (.arn, .type, .account_id). vectra.entity.resolved_identity is VARCHAR. error_code non-null = failed. `read_only` is stored as a lowercase **string** (`'true'`/`'false'`), not a boolean — always quote the value.
 
 ### 1. Principal CloudTrail Events
 **When to use:** What did a compromised credential do?
@@ -67,7 +67,7 @@ SELECT timestamp, event_name, event_source,
 FROM aws.cloudtrail._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND event_source = 'iam.amazonaws.com' AND read_only = false
+  AND event_source = 'iam.amazonaws.com' AND read_only = 'false'
   -- Optional: AND CONTAINS(LOWER(user_identity.arn), LOWER('{identity}'))
 ORDER BY timestamp DESC LIMIT {limit}
 ```
@@ -84,7 +84,7 @@ SELECT timestamp, user_principal_name, ip_address,
        app_display_name, client_app_used,
        status.error_code, status.failure_reason,
        location.city, location.state, location.country_or_region,
-       risk_level_aggregated, risk_level_during_signin,
+       risk_level_aggregated, risk_level_during_sign_in,
        device_detail.is_compliant, device_detail.is_managed,
        conditional_access_status
 FROM entra.signins._all
@@ -115,7 +115,7 @@ SELECT timestamp, user_principal_name, ip_address,
        app_display_name, client_app_used,
        status.error_code, status.failure_reason,
        location.city, location.country_or_region,
-       risk_level_aggregated, risk_level_during_signin,
+       risk_level_aggregated, risk_level_during_sign_in,
        conditional_access_status
 FROM entra.signins._all
 WHERE dt > date_add('hour', -{hours_back}, now())
@@ -143,14 +143,14 @@ ORDER BY timestamp DESC LIMIT {limit}
 
 ## Entra ID Directory Audits — `entra.directoryaudits._all`
 
-**Key:** initiated_by.user.user_principal_name, initiated_by.app.display_name. target_resources_flat is JSON string.
+**Key:** initiated_by.user.user_principal_name, initiated_by.app.display_name. `initiated_by_flat` is a JSON-string companion field. `target_resources` has **no** flat companion — it's an ARRAY of structs; use `ANY_MATCH`/dot-notation on a resolved element, not a `_flat` field (that field doesn't exist and will fail with `COLUMN_NOT_FOUND`).
 
 ### 1. User Directory Activity (default 168h)
 ```sql
 SELECT timestamp, activity_display_name, category, operation_type,
        initiated_by.user.user_principal_name,
        initiated_by.app.display_name,
-       target_resources_flat, result
+       target_resources, result
 FROM entra.directoryaudits._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
@@ -163,7 +163,7 @@ ORDER BY timestamp DESC LIMIT {limit}
 SELECT timestamp, activity_display_name, category, operation_type,
        initiated_by.user.user_principal_name,
        initiated_by.app.display_name,
-       target_resources_flat, result
+       target_resources, result
 FROM entra.directoryaudits._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
@@ -271,7 +271,7 @@ ORDER BY timestamp DESC LIMIT {limit}
 
 ## Azure Control Plane — `azurecp.operations._all`
 
-**Important:** Day-level dt (use date_add('day', -N, current_date)). identity/properties are JSON blobs. resulttype: Success/Failed.
+**Important:** Day-level dt (use date_add('day', -N, current_date)). identity/properties are JSON blobs. resulttype: Success/Failure/Start (not "Failed").
 
 ### 1. Actor Azure Operations
 ```sql

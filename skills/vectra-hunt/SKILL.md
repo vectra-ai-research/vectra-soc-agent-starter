@@ -1,6 +1,6 @@
 ---
 name: vectra-hunt
-description: Searches and hunts over Vectra metadata in two modes — (1) ad-hoc Investigation Query SQL using pre-validated recipes for network sessions, DNS, HTTP, TLS/X.509, SMB, Kerberos, NTLM, LDAP, RDP, DCE-RPC, SSH, SMTP, DHCP, RADIUS, beacons, IDS matches, and Entra/M365/AWS CloudTrail/Azure CP; (2) threat-intelligence-driven hunt campaigns that turn a TI report, advisory, IOC list, or any named or currently-circulating threat (ransomware family in the news, named APT group, public CVE) into a structured multi-query sweep with a consolidated hunt report. Use when the user asks an investigation or hunting question needing custom SQL — including sweep, correlate, pivot on, hunt for, look for, find every — or supplies a TI report / asks whether the environment is affected by a named threat. Falls back to custom SQL via query-construction rules when no recipe matches.
+description: Searches and hunts over Vectra metadata in two modes — (1) ad-hoc Investigation Query SQL using pre-validated recipes for network sessions, DNS, HTTP, TLS/X.509, SMB, Kerberos, NTLM, LDAP, RDP, DCE-RPC, SSH, DHCP, RADIUS, beacons, IDS matches, and Entra/M365/AWS CloudTrail/Azure CP; (2) threat-intelligence-driven hunt campaigns that turn a TI report, advisory, IOC list, or any named or currently-circulating threat (ransomware family in the news, named APT group, public CVE) into a structured multi-query sweep with a consolidated hunt report. Use when the user asks an investigation or hunting question needing custom SQL — including sweep, correlate, pivot on, hunt for, look for, find every — or supplies a TI report / asks whether the environment is affected by a named threat. Falls back to custom SQL via query-construction rules when no recipe matches.
 ---
 
 # Vectra Hunt — Metadata Search & Threat-Intel Hunting
@@ -151,7 +151,6 @@ you go off-recipe).
 | Table | Recipes | Key investigations |
 |-------|---------|--------------------|
 | `network.ssh._all` | 4 | Host sessions, inbound SSH, HASSH hunt, cipher hunt |
-| `network.smtp._all` | 4 | Host activity, sender hunt, recipient hunt, unencrypted SMTP |
 | `network.dhcp._all` | 4 | By hostname, by IP, by MAC, by server (rogue DHCP) |
 | `network.radius._all` | 3 | Host auth, failures (VPN brute force), user tracking |
 | `network.beacon._all` | 4 | Host beacons, domain hunt (ANY_MATCH), high-frequency, dest IP hunt |
