@@ -378,6 +378,12 @@ Disposition:
   - Triage rule scope (if BTP): (source_host=<id>, detection_type=<type>, dst_set=<...>) OR (account=<UPN>, detection_type=<type>, target=<service>)
   - Tier 2 escalation note (if TP-High): <one paragraph for IR handoff>
   - Containment recommendation (if TP-High): <isolate host? disable account? rotate KRBTGT? reset service-account passwords?>
+  - Acknowledgement: <create_assignment — starts metrics timers, not a handoff>
+  - External owner (if TP): <set_detection_workflow_state(detection_ids=[<ids>],
+    external_reference_id="<TICKET>", investigation_status="escalated")>
+  - Proposed entity note: <the literal create_entity_note call, filled in, or
+    "none — prior note stands">, then ask whether to write it
+    (read existing notes first; see verdict-framework.md § Persisting the verdict)
 ```
 
 > The full per-entity verdict template (with multi-tenant scope, key-asset

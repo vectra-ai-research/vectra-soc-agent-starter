@@ -92,10 +92,14 @@ The **Vectra MCP server** must be connected. Required tools:
 | `list_assignments` / `list_assignments_for_user` / `get_assignment_for_entity` | See which entities are already assigned / under investigation |
 | `get_detection_details` / `get_detection_summary` | Drill into a single detection |
 | `get_host_details` / `get_account_details` | Drill into entity context |
-| `list_triage_rules` / `list_groups` | See what triage rules and authorized-entity groups already exist (Bulk Detection Consolidation) |
+| `list_triage_rules` / `list_groups` | See what triage rules and authorized-entity groups already exist (Bulk Detection Consolidation). Also how an operator-named out-of-scope group is resolved — see [`AGENTS.md`](../../AGENTS.md) §Operator context |
+| `list_entities` with `fields="note,notes,note_modified_by,note_modified_timestamp"` | Read an entity's existing notes **before** proposing a new one |
+| `get_detection_history` | Full change history of one detection — when it first fired, each recurrence, each triage/rescore. Carries `mitre` technique IDs and `change_type`, neither of which is on the detection itself |
 | `add_member_to_group` | Propose adding a shared value (IP/domain/host/account) to an existing group — draft only, human-in-the-loop |
 | `close_detections` | Propose closing one or more detections with a reason (`remediated` / `benign`) — draft only, human-in-the-loop. Takes a list; pass a single-element list to close one. All IDs in a call share the same reason, so group by reason |
 | `reopen_detections` | Propose re-opening previously closed detections — draft only, human-in-the-loop. Re-opening triggers a rescore, so entity urgency may change. Not to be confused with the `open_detections` report data source, which *lists* currently-open detections |
+| `create_entity_note` | Propose persisting a verdict to the entity — draft only, human-in-the-loop. Appends, so read existing notes first ([verdict-framework.md](references/verdict-framework.md#persisting-the-verdict)) |
+| `set_detection_workflow_state` | Propose linking detections to the external ticket that owns the work (`external_reference_id`) and setting `investigation_status` — draft only, human-in-the-loop. This, not the Vectra assignment, records external ownership |
 | `run_investigation` | Execute Investigation Query SQL pivots (used via `vectra-hunt`) |
 | `get_investigation_results` | Page through SQL results |
 | `get_investigation_schema` / `get_investigation_sql_reference` | Inspect tables / SQL grammar before authoring queries |

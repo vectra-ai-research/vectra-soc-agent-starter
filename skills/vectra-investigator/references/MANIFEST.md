@@ -11,7 +11,9 @@ The SKILL.md body and these three short files:
 
 - `mental-model.md` — Vectra entity-first triage, kill-chain
   categories, multi-tenancy rules.
-- `verdict-framework.md` — BTP / TP-Low / TP-High / NMD rubric.
+- `verdict-framework.md` — BTP / TP-Low / TP-High / NMD rubric, plus
+  how to persist a verdict as an entity note (read-before-write,
+  propose-don't-execute).
 - `best-practices.md` — common pitfalls (kept short on purpose).
 
 ## Per-workflow load
