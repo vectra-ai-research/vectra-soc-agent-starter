@@ -82,6 +82,16 @@ When you BTP something, the right scope for a suppression rule is the
 Never recommend a rule that suppresses a detection type globally —
 that blinds the platform to real future TPs of the same shape.
 
+The same discipline applies when the shared value spans **many
+entities** rather than one host/account — e.g. 12 hosts all hitting
+the same benign SaaS destination. Grouping those by a shared
+*label* ("all Hidden HTTP/S Tunnel") is not the same as confirming
+they share a literal, scopable value (the actual destination). See
+[`workflow-bulk-consolidation.md`](workflow-bulk-consolidation.md)
+(Workflow 8) for finding that value and recommending a group addition
+or new rule — prefer adding the shared value to an existing group
+already wired to a rule over writing N per-host rules.
+
 ---
 
 ## BTP baseline one-liner (for the next analyst)

@@ -16,7 +16,8 @@ pick the top-N entities, render verdicts.
 ```
 ┌─ 1. Pull the queue ────────────────────────────────────────────────┐
 │ list_entities or list_detections_with_basic_info, filter open,     │
-│ sort by score                                                      │
+│ sort by score. Large cluster of similar low-urgency noise instead  │
+│ of a few serious entities? → workflow-bulk-consolidation.md        │
 └────────────────────────────────────────────────────────────────────┘
               │
               ▼
@@ -94,6 +95,14 @@ the wrong shape for an initial sweep.
 
 In a multi-tenant deployment, run this per tenant — see
 [`mental-model.md`](mental-model.md) §4.
+
+If the queue is dominated by a large cluster of similar-looking
+low-urgency detections rather than a handful of serious entities,
+grinding through them one at a time is the wrong move. Switch to
+[`workflow-bulk-consolidation.md`](workflow-bulk-consolidation.md) —
+it finds whether they share a real, rule-scopable common denominator
+(not just a label) and recommends a batch triage rule or group
+addition instead of N individual verdicts.
 
 ---
 
