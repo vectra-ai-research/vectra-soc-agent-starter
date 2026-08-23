@@ -226,6 +226,31 @@ PY
 fi
 
 # ----------------------------------------------------------------------
+section "8. No command name shadows a skill name"
+
+# Commands and skills share a namespace. A command whose filename matches a
+# skill directory silently fails to register — no error, the command is just
+# absent. This shipped once (plugin/commands/vectra-hunt.md vs
+# skills/vectra-hunt/) and was only caught by counting five commands where
+# there should have been six.
+if [ ! -d plugin/commands ] || [ ! -d skills ]; then
+  ok "plugin/commands or skills missing — skipping"
+else
+  shadow_hits=0
+  for c in plugin/commands/*.md; do
+    [ -f "$c" ] || continue
+    name="$(basename "$c" .md)"
+    if [ -d "skills/$name" ]; then
+      fail "command /$name shadows the skill skills/$name — it will not register"
+      shadow_hits=$((shadow_hits + 1))
+    fi
+  done
+  if [ "$shadow_hits" = "0" ]; then
+    ok "no command shadows a skill name"
+  fi
+fi
+
+# ----------------------------------------------------------------------
 printf '\n'
 if [ "$failures" -gt 0 ]; then
   printf '%d check(s) failed\n' "$failures" >&2
