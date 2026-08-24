@@ -22,7 +22,7 @@ SELECT timestamp, id.orig_h, orig_hostname.id AS host_id,
 FROM network.dns._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(query, '{domain}')
+  AND query LIKE '%{domain}%'
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -35,9 +35,12 @@ FROM network.dns._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND rcode_name = 'NXDOMAIN'
-  -- Optional: AND orig_hostname.id = {host_id}
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND orig_hostname.id = {host_id}`
 
 ### 4. DNS Tunneling Indicators — Covert data channels
 **When to use:** Long subdomain labels (data encoding) or TXT queries (tunneling channel). Default min_query_length: 50.
@@ -48,9 +51,12 @@ FROM network.dns._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND (LENGTH(query) >= {min_query_length} OR qtype_name = 'TXT')
-  -- Optional: AND orig_hostname.id = {host_id}
 ORDER BY LENGTH(query) DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND orig_hostname.id = {host_id}`
 
 ---
 
@@ -79,7 +85,7 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.http._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(host, '{http_host}')
+  AND host LIKE '%{http_host}%'
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -94,9 +100,12 @@ FROM network.http._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND method = 'POST' AND request_body_len >= {min_body_bytes}
-  -- Optional: AND orig_hostname.id = {host_id}
 ORDER BY request_body_len DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND orig_hostname.id = {host_id}`
 
 ### 4. Hunt by User-Agent — Suspicious HTTP clients
 **When to use:** Hunt curl, PowerShell, Python, Cobalt Strike, Metasploit, wget.
@@ -108,6 +117,6 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.http._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(user_agent, '{user_agent}')
+  AND user_agent LIKE '%{user_agent}%'
 ORDER BY timestamp DESC LIMIT {limit}
 ```

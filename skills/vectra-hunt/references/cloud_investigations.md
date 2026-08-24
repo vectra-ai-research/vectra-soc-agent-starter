@@ -3,19 +3,24 @@ Covers: AWS CloudTrail, Entra ID (Sign-ins + Directory Audits), M365, Azure CP
 
 ## AWS CloudTrail — `aws.cloudtrail._all`
 
-**Key:** user_identity is struct (.arn, .type, .account_id). vectra.entity.resolved_identity is VARCHAR. error_code non-null = failed. `read_only` is stored as a lowercase **string** (`'true'`/`'false'`), not a boolean — always quote the value.
+**Key:** user_identity is a struct (.arn, .type, .account_id). `vectra.entity.resolved_identity` is **also a struct**, not a VARCHAR — leaves are `.arn`, `.user_name`, `.account_id`, `.principal_id`, `.identity_type`, `.canonical_name`, `.invoked_by`, `.aws_region`. `LOWER()` on the bare struct is a `FUNCTION_NOT_FOUND` (probed live 2026-08-24). Prefer `.user_name`: on assumed-role events `.arn` is frequently null while `.user_name` carries the human identity.
+
+Two structs can share a leaf name, and **the result serialisation keys by leaf, so a duplicate silently overwrites**. `SELECT user_identity.arn, vectra.entity.resolved_identity.arn` returns one `arn` field, not two — the populated value can vanish behind the null. Alias both: `user_identity.arn AS user_arn, vectra.entity.resolved_identity.arn AS resolved_arn`. Aliases must be bare identifiers with no quotes.
+
+error_code non-null = failed. `read_only` is stored as a lowercase **string** (`'true'`/`'false'`), not a boolean — always quote the value.
 
 ### 1. Principal CloudTrail Events
 **When to use:** What did a compromised credential do?
 ```sql
 SELECT timestamp, event_name, event_source,
-       user_identity.arn, user_identity.type, user_identity.account_id,
+       user_identity.arn AS user_arn, user_identity.type, user_identity.account_id,
+       vectra.entity.resolved_identity.user_name AS resolved_user,
        source_ip_address, error_code, read_only, management_event, aws_region
 FROM aws.cloudtrail._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND (CONTAINS(LOWER(user_identity.arn), LOWER('{identity}'))
-       OR CONTAINS(LOWER(vectra.entity.resolved_identity), LOWER('{identity}')))
+  AND (LOWER(user_identity.arn) LIKE LOWER('%{identity}%')
+       OR LOWER(vectra.entity.resolved_identity.user_name) LIKE LOWER('%{identity}%'))
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -29,10 +34,13 @@ FROM aws.cloudtrail._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND error_code IS NOT NULL
-  -- Optional: AND CONTAINS(LOWER(user_identity.arn), LOWER('{identity}'))
-  -- Optional: AND source_ip_address = '{src_ip}'
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND LOWER(user_identity.arn) LIKE LOWER('%{identity}%')`
+- `AND source_ip_address = '{src_ip}'`
 
 ### 3. Hunt by Event Name
 **High-value:** GetSecretValue, CreateUser, CreateAccessKey, PutRolePolicy, AttachRolePolicy, AssumeRole, GetObject.
@@ -43,7 +51,7 @@ SELECT timestamp, event_name, event_source,
 FROM aws.cloudtrail._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(LOWER(event_name), LOWER('{event_name}'))
+  AND LOWER(event_name) LIKE LOWER('%{event_name}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -68,9 +76,12 @@ FROM aws.cloudtrail._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND event_source = 'iam.amazonaws.com' AND read_only = 'false'
-  -- Optional: AND CONTAINS(LOWER(user_identity.arn), LOWER('{identity}'))
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND LOWER(user_identity.arn) LIKE LOWER('%{identity}%')`
 
 ---
 
@@ -90,7 +101,7 @@ SELECT timestamp, user_principal_name, ip_address,
 FROM entra.signins._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(LOWER(user_principal_name), LOWER('{upn}'))
+  AND LOWER(user_principal_name) LIKE LOWER('%{upn}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -104,10 +115,13 @@ FROM entra.signins._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND status.error_code != 0
-  -- Optional: AND CONTAINS(LOWER(user_principal_name), LOWER('{upn}'))
-  -- Optional: AND ip_address = '{src_ip}'
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND LOWER(user_principal_name) LIKE LOWER('%{upn}%')`
+- `AND ip_address = '{src_ip}'`
 
 ### 3. Risky Sign-ins — Identity Protection anomalies
 ```sql
@@ -121,9 +135,12 @@ FROM entra.signins._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND (risk_level_aggregated = 'high' OR risk_level_aggregated = 'medium')
-  -- Optional: AND CONTAINS(LOWER(user_principal_name), LOWER('{upn}'))
 ORDER BY risk_level_aggregated DESC, timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND LOWER(user_principal_name) LIKE LOWER('%{upn}%')`
 
 ### 4. Sign-ins from Country
 ```sql
@@ -135,7 +152,7 @@ SELECT timestamp, user_principal_name, ip_address,
 FROM entra.signins._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(UPPER(location.country_or_region), UPPER('{country}'))
+  AND UPPER(location.country_or_region) LIKE UPPER('%{country}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -154,7 +171,7 @@ SELECT timestamp, activity_display_name, category, operation_type,
 FROM entra.directoryaudits._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(LOWER(initiated_by.user.user_principal_name), LOWER('{upn}'))
+  AND LOWER(initiated_by.user.user_principal_name) LIKE LOWER('%{upn}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -168,8 +185,8 @@ FROM entra.directoryaudits._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND (category = 'RoleManagement'
-       OR CONTAINS(UPPER(activity_display_name), 'ROLE')
-       OR CONTAINS(UPPER(activity_display_name), 'ADMIN'))
+       OR UPPER(activity_display_name) LIKE '%ROLE%'
+       OR UPPER(activity_display_name) LIKE '%ADMIN%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -184,7 +201,7 @@ SELECT timestamp, user_id, operation, workload,
 FROM m365.sharepoint._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(LOWER(user_id), LOWER('{user_id}'))
+  AND LOWER(user_id) LIKE LOWER('%{user_id}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -195,9 +212,12 @@ FROM m365.sharepoint._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND operation = 'FileDownloaded'
-  -- Optional: AND CONTAINS(LOWER(user_id), LOWER('{user_id}'))
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND LOWER(user_id) LIKE LOWER('%{user_id}%')`
 
 ### 3. External Sharing
 ```sql
@@ -208,9 +228,12 @@ WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND (operation = 'SharingInvitationCreated' OR operation = 'AnonymousLinkCreated'
        OR operation = 'AddedToSecureLink' OR CONTAINS(operation, 'Sharing'))
-  -- Optional: AND CONTAINS(LOWER(user_id), LOWER('{user_id}'))
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND LOWER(user_id) LIKE LOWER('%{user_id}%')`
 
 ## M365 Exchange — `m365.exchange._all`
 
@@ -221,8 +244,8 @@ SELECT timestamp, user_id, mailbox_owner_upn, operation,
 FROM m365.exchange._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND (CONTAINS(LOWER(user_id), LOWER('{user_id}'))
-       OR CONTAINS(LOWER(mailbox_owner_upn), LOWER('{user_id}')))
+  AND (LOWER(user_id) LIKE LOWER('%{user_id}%')
+       OR LOWER(mailbox_owner_upn) LIKE LOWER('%{user_id}%'))
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -235,11 +258,14 @@ WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND (operation = 'New-InboxRule' OR operation = 'Set-InboxRule'
        OR operation = 'UpdateInboxRules'
-       OR CONTAINS(UPPER(parameters_flat), 'FORWARDTO')
-       OR CONTAINS(UPPER(parameters_flat), 'REDIRECTTO'))
-  -- Optional: AND CONTAINS(LOWER(user_id), LOWER('{user_id}'))
+       OR UPPER(parameters_flat) LIKE '%FORWARDTO%'
+       OR UPPER(parameters_flat) LIKE '%REDIRECTTO%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND LOWER(user_id) LIKE LOWER('%{user_id}%')`
 
 ## M365 General — `m365.general._all`
 
@@ -250,7 +276,7 @@ SELECT timestamp, user_id, operation, workload,
 FROM m365.general._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(LOWER(user_id), LOWER('{user_id}'))
+  AND LOWER(user_id) LIKE LOWER('%{user_id}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -263,7 +289,7 @@ SELECT timestamp, user_id, operation, actor_ip_address,
 FROM m365.active_directory._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(LOWER(user_id), LOWER('{user_id}'))
+  AND LOWER(user_id) LIKE LOWER('%{user_id}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -280,8 +306,8 @@ SELECT timestamp, operationname, actor.name, actor.objectid,
        rolename, rolescope, applicationname
 FROM azurecp.operations._all
 WHERE dt > date_add('day', -{days_back}, current_date)
-  AND (CONTAINS(LOWER(actor.name), LOWER('{actor}'))
-       OR CONTAINS(LOWER(actor.objectid), LOWER('{actor}')))
+  AND (LOWER(actor.name) LIKE LOWER('%{actor}%')
+       OR LOWER(actor.objectid) LIKE LOWER('%{actor}%'))
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -292,10 +318,13 @@ SELECT timestamp, operationname, actor.name, actor.objectid,
 FROM azurecp.operations._all
 WHERE dt > date_add('day', -{days_back}, current_date)
   AND resulttype = 'Failed'
-  -- Optional: AND CONTAINS(LOWER(actor.name), LOWER('{actor}'))
-  -- Optional: AND calleripaddress = '{src_ip}'
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND LOWER(actor.name) LIKE LOWER('%{actor}%')`
+- `AND calleripaddress = '{src_ip}'`
 
 ### 3. Hunt by Operation
 **High-value:** roleAssignments/write, roleAssignments/delete, virtualMachines/delete, storageAccounts/write, vaults/secrets/get, networkSecurityGroups/write.
@@ -305,7 +334,7 @@ SELECT timestamp, operationname, actor.name, actor.objectid,
        rolename, rolescope, applicationname
 FROM azurecp.operations._all
 WHERE dt > date_add('day', -{days_back}, current_date)
-  AND CONTAINS(LOWER(operationname), LOWER('{operation}'))
+  AND LOWER(operationname) LIKE LOWER('%{operation}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -327,8 +356,11 @@ SELECT timestamp, operationname, actor.name, actor.objectid,
        rolename, rolescope, applicationname
 FROM azurecp.operations._all
 WHERE dt > date_add('day', -{days_back}, current_date)
-  AND (CONTAINS(LOWER(operationname), 'roleassignments/write')
-       OR CONTAINS(LOWER(operationname), 'roleassignments/delete'))
-  -- Optional: AND CONTAINS(LOWER(actor.name), LOWER('{actor}'))
+  AND (LOWER(operationname) LIKE '%roleassignments/write%'
+       OR LOWER(operationname) LIKE '%roleassignments/delete%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND LOWER(actor.name) LIKE LOWER('%{actor}%')`

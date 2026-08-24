@@ -26,7 +26,7 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.ssl._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(server_name, '{server_name}')
+  AND server_name LIKE '%{server_name}%'
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -40,9 +40,12 @@ FROM network.ssl._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND version_num <= 770
-  -- Optional: AND orig_hostname.id = {host_id}
 ORDER BY version_num ASC, timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND orig_hostname.id = {host_id}`
 
 ### 4. Hunt by JA3 Fingerprint — Known-bad TLS client
 **When to use:** JA3 identifies malware families. Hunt known-bad tooling.
@@ -91,9 +94,12 @@ FROM network.x509._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND certificate.subject = certificate.issuer
-  -- Optional: AND id.orig_h = '{src_ip}'
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND id.orig_h = '{src_ip}'`
 
 ### 3. Expiring Certificates — Certificate hygiene
 **When to use:** Find certs expiring within N days. Expired certs included.
@@ -121,6 +127,6 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.x509._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(UPPER(certificate.subject), UPPER('{subject}'))
+  AND UPPER(certificate.subject) LIKE UPPER('%{subject}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```

@@ -48,10 +48,13 @@ WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND local_orig = true AND local_resp = false
   AND orig_ip_bytes > {min_bytes}
-  -- Optional: AND id.orig_h = '{src_ip}'
 ORDER BY orig_ip_bytes DESC
 LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND id.orig_h = '{src_ip}'`
 
 ## 4. Failed Connections — Scanning and C2 indicators
 
@@ -68,11 +71,14 @@ WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND local_orig = true
   AND conn_state IN ('S0', 'REJ')
-  -- Optional: AND orig_hostname.id = {host_id}
-  -- Optional: AND id.orig_h = '{src_ip}'
 ORDER BY timestamp DESC
 LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND orig_hostname.id = {host_id}`
+- `AND id.orig_h = '{src_ip}'`
 
 ## 5. Detection Window Sessions — Bridge detection to network evidence
 

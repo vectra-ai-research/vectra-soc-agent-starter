@@ -43,9 +43,22 @@ WHERE dt > date_add('day', -{days_back}, current_date)
 
 ## String matching
 
-- **Substring (case-insensitive):** `AND CONTAINS(LOWER(field), LOWER('{value}'))`
+- **Substring (case-insensitive):** `AND LOWER(field) LIKE LOWER('%{value}%')`
 - **Exact match:** `AND field = '{value}'`
-- **Array search:** `AND ANY_MATCH(array_field, x -> CONTAINS(x, '{value}'))`
+- **Array membership:** `AND CONTAINS(array_field, '{value}')`
+- **Array, case-insensitive:** `AND ANY_MATCH(array_field, a -> UPPER(a) = UPPER('{value}'))`
+- **Array, substring:** `AND ANY_MATCH(array_field, a -> LOWER(a) LIKE LOWER('%{value}%'))`
+
+> **`CONTAINS` is an array function, not a string function.** Its only valid
+> forms are `CONTAINS(array, element)` and `CONTAINS('<cidr>', TRY_CAST(ip AS
+> IPADDRESS))`. There is no two-string signature, so
+> `CONTAINS(LOWER(field), LOWER('x'))` fails with `FUNCTION_NOT_FOUND` — and
+> because `LOWER`/`UPPER`/`TRIM` return varchar, wrapping an array in one of
+> them breaks the array form too. Use `LIKE`, `STRPOS(...) > 0`, or
+> `REGEXP_LIKE(field, '(?i)value')` for text; `ANY_MATCH` for arrays.
+>
+> This file previously documented the two-string form, and 45 recipe call sites
+> copied it. `skills/scripts/validate_recipes.py` now catches it.
 
 ---
 
@@ -90,15 +103,16 @@ them all in parallel.
 
 - **Aggregates:** COUNT, MAX, MIN, SUM, AVG, STDDEV, STDDEV_SAMP,
   STDDEV_POP
-- **String:** LOWER, UPPER, LENGTH, ABS, CONCAT, CONTAINS, COALESCE,
+- **String:** LOWER, UPPER, LENGTH, ABS, CONCAT, COALESCE,
   SUBSTR, REPLACE, REVERSE, SPLIT, SPLIT_PART, STRPOS, NULLIF, TRIM
+  — **not** CONTAINS; see String matching above
 - **Time:** DATE, NOW, DATE_ADD, DATE_DIFF,
   FROM_ISO8601_TIMESTAMP, FROM_UNIXTIME, TO_UNIXTIME
 - **Regex:** REGEXP_COUNT, REGEXP_EXTRACT_ALL, REGEXP_EXTRACT,
   REGEXP_LIKE, REGEXP_POSITION, REGEXP_REPLACE, REGEXP_SPLIT
 - **Casting:** TRY_CAST, CAST
 - **Conditional:** CASE WHEN
-- **Arrays:** ANY_MATCH, ALL_MATCH, DISTINCT, ARRAY_AGG, CARDINALITY
+- **Arrays:** CONTAINS, ANY_MATCH, ALL_MATCH, DISTINCT, ARRAY_AGG, CARDINALITY
 - **Aggregation extras:** COUNT(DISTINCT ...), APPROX_DISTINCT,
   APPROX_PERCENTILE (use with GROUP BY / HAVING as needed)
 - **JSON:** JSON_PARSE, JSON_ARRAY_LENGTH, JSON_ARRAY_CONTAINS
