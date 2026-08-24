@@ -271,11 +271,67 @@ def check_block(path: Path, start: int, sql: str, ref: Reference) -> list[Findin
                         f"(array, element) or (cidr, ipaddress); {SUBSTRING_FIX}",
                         l.strip()))
 
+    # ---- LOWER/UPPER/TRIM on something that is not a scalar -----------
+    # Same class as CONTAINS(UPPER(array)): these take varchar, so handing them
+    # a struct or an array is FUNCTION_NOT_FOUND. This is how the CloudTrail
+    # recipe shipped broken — LOWER(vectra.entity.resolved_identity) on a struct
+    # whose eight leaves the schema documents plainly.
+    if ref.loaded:
+        known = {}
+        for key in resolved:
+            known.update(ref.columns.get(key, {}))
+        # Any documented column that is a prefix of another is an interior node.
+        structs = {c.rsplit(".", 1)[0] for c in known if "." in c}
+        for i, l in enumerate(lines):
+            for m in re.finditer(
+                rf"\b(LOWER|UPPER|TRIM)\s*\(\s*([A-Za-z_][\w.]*)\s*\)", l, re.I
+            ):
+                fn, col = m.group(1).upper(), m.group(2)
+                bad_array = col in known and known[col]
+                if col in structs or bad_array:
+                    kind = "an array" if bad_array else "a struct"
+                    hint = sorted(c for c in known if c.startswith(col + "."))[:1]
+                    out.append(Finding(
+                        path, start + 1 + i, "error", "scalar-fn-on-composite",
+                        f"{fn}() on '{col}', which is {kind} — {fn}() takes varchar, "
+                        f"so this is FUNCTION_NOT_FOUND"
+                        + (f"; reference a leaf such as {hint[0]}" if hint else "")
+                        + ("" if not bad_array else "; for arrays use "
+                           f"ANY_MATCH({col}, x -> {fn}(x) = ...)"),
+                        l.strip()))
+
+    # ---- quoted alias in an identifier position -----------------------
+    # `AS 'x'` is a hard SYNTAX_ERROR. `ORDER BY 'x'` is accepted as an ordering
+    # on a string constant and silently returns unsorted rows, so a top-N recipe
+    # written that way looks fine and is not a top-N. Bare identifiers only.
+    for i, l in enumerate(lines):
+        for m in re.finditer(
+            r"\b(AS|ORDER\s+BY|GROUP\s+BY)\s+'([A-Za-z_]\w*)'", l, re.I
+        ):
+            kw = " ".join(m.group(1).upper().split())
+            silent = kw != "AS"
+            out.append(Finding(
+                path, start + 1 + i, "error", "quoted-alias",
+                f"{kw} '{m.group(2)}' — aliases must be bare identifiers. "
+                + ("This is accepted as an ordering on a string constant and "
+                   "returns unsorted rows with no error." if silent
+                   else "This is a SYNTAX_ERROR.")
+                + f" Write {kw} {m.group(2)}.",
+                l.strip()))
+
     # ---- struct used where a leaf is needed ---------------------------
     if ref.loaded:
         for key in resolved:
             cols = ref.columns.get(key, {})
-            parents = {c.split(".")[0] for c in cols if "." in c}
+            # Every interior node, not just the first segment. Taking
+            # c.split('.')[0] saw only `vectra` for
+            # `vectra.entity.resolved_identity.arn`, so nested structs were
+            # never checked and the broken CloudTrail recipe passed clean.
+            parents = {
+                ".".join(c.split(".")[:n])
+                for c in cols if "." in c
+                for n in range(1, len(c.split(".")))
+            }
             leaves = set(cols)
             for i, l in enumerate(lines):
                 for name in parents:
