@@ -145,6 +145,39 @@ fi
 rm -f "$bash_errs"
 
 # ----------------------------------------------------------------------
+section "9. Recipe SQL is valid"
+
+# The recipe library is ~2,400 lines of SQL that nothing executes. One wrong
+# idiom — CONTAINS(LOWER(x), LOWER('y')), which has no valid Trino signature —
+# reached 45 call sites before anyone ran an affected recipe. Rules come from
+# the MCP server's own sql_reference.md and schema_*.md, so they cannot drift
+# from what the API accepts.
+#
+# Needs the server checkout alongside this one. Without it the schema-aware
+# checks are SKIPPED and say so — never silently passed.
+recipe_ref="../vectra-ai-mcp-server/src/vectra_mcp_server/resources"
+if [ ! -f skills/scripts/validate_recipes.py ]; then
+  ok "validate_recipes.py not present — skipping"
+elif ! command -v python3 >/dev/null 2>&1; then
+  printf 'warn: python3 not available — skipping recipe SQL validation\n'
+elif [ ! -d "$recipe_ref" ]; then
+  printf 'warn: %s not found — recipe SQL validated without schema awareness\n' "$recipe_ref"
+  if python3 skills/scripts/validate_recipes.py --quiet >/dev/null 2>&1; then
+    ok "recipe SQL passes the schema-independent checks"
+  else
+    fail "recipe SQL has errors (run: python3 skills/scripts/validate_recipes.py)"
+  fi
+else
+  if python3 skills/scripts/validate_recipes.py \
+       --reference-dir "$recipe_ref" --quiet >/dev/null 2>&1; then
+    ok "recipe SQL passes all checks, including schema-aware ones"
+  else
+    fail "recipe SQL has errors"
+    python3 skills/scripts/validate_recipes.py --reference-dir "$recipe_ref" --quiet 2>/dev/null
+  fi
+fi
+
+# ----------------------------------------------------------------------
 printf '\n'
 if [ "$failures" -gt 0 ]; then
   printf '%d check(s) failed\n' "$failures" >&2
