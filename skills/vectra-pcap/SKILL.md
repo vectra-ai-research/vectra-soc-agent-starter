@@ -56,6 +56,37 @@ Do **not** use this skill to:
 
 ---
 
+## Known limitation — requires a shared filesystem
+
+**This skill only works where the MCP server and your shell run on the same
+machine.** That is true in Claude Code (terminal) and false in Cowork, where
+bash runs in an isolated Linux VM. Verified 2026-08-24:
+
+| | Claude Code | Cowork |
+|---|---|---|
+| MCP server writes the capture to | the Mac's `/tmp/vectra-pcap/` | the Mac's `/tmp/vectra-pcap/` |
+| `pcap-context.sh` runs on | the Mac — same host, path resolves | a Linux VM whose `/tmp` is its own |
+| `tshark` available | yes, via `brew install wireshark` | **no, and cannot be installed** — no root, `no_new_privs` set |
+
+Two independent blockers in Cowork, so no configuration rescues it: the capture
+is unreachable *and* the analysis binary cannot be installed. Sharing the
+capture through a connected folder would fix the first and not the second.
+
+Historical note, because it explains a design that otherwise looks wrong: the
+tool used to return base64 of the whole capture inline, and this skill told you
+to `echo` it into `base64 -d`. That was a workaround for exactly this host
+split — re-emitting the bytes was the only way to get them across a filesystem
+boundary. It was abandoned because it only worked on trivially small captures
+and because the chain-of-custody `shasum` ran *downstream* of the
+transcription, fingerprinting whatever came through rather than what Vectra
+sent. The path-based contract is correct on a shared host and removes the
+Cowork path entirely rather than pretending to support it.
+
+**Open for future discussion**, not currently blocking: a pure-Python triage
+fallback (scapy or dpkt, installable without root) would make the skill work in
+sandboxed hosts, at the cost of reimplementing the tshark field extraction. Not
+worth doing until someone actually needs PCAP triage from Cowork.
+
 ## Prerequisites
 
 | Requirement | Notes |
