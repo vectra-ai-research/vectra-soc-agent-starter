@@ -1,6 +1,6 @@
 ---
 name: vectra-pcap
-description: Pulls the PCAP attached to a Vectra network detection via the MCP server, decodes it to disk, and runs a structured tshark triage pass — TLS Client Hello tuples (SNI, JA3, cipher, ALPN, JA4), HTTP auth, NTLM/Kerberos, SMB shares, RPC bindings, DNS history, SSH, and ProcessCommandLine strings — to feed evidence back into the detection verdict. Use when the user asks for the PCAP, raw packets, or wire-level evidence for a detection. Cloud and log-based detections (M365, Azure AD, AWS) have no PCAP — route those to vectra-investigator.
+description: Pulls the PCAP attached to a Vectra network detection via the MCP server, which writes it to disk and returns the file path, then runs a structured tshark triage pass against that file — TLS Client Hello tuples (SNI, JA3, cipher, ALPN, JA4), HTTP auth, NTLM/Kerberos, SMB shares, RPC bindings, DNS history, SSH, and ProcessCommandLine strings — to feed evidence back into the detection verdict. Use when the user asks for the PCAP, raw packets, or wire-level evidence for a detection. Cloud and log-based detections (M365, Azure AD, AWS) have no PCAP — route those to vectra-investigator.
 ---
 
 # Vectra PCAP — Detection PCAP Retrieval & Local Triage
@@ -9,8 +9,9 @@ This skill bridges Vectra's per-detection PCAP attachment to a local
 `tshark` triage pass. It does **two** things:
 
 1. **Pull** the PCAP for a given `detection_id` by calling the Vectra
-   MCP tool `vectra-ai-mcp:get_detection_pcap`, decoding the base64
-   response, and writing the bytes to disk.
+   MCP tool `vectra-ai-mcp:get_detection_pcap`, which writes the capture
+   to disk server-side and returns its path, size and sha256. The packet
+   bytes never pass through the conversation.
 2. **Triage** the resulting capture file with `scripts/pcap-context.sh`
    — a single tshark-driven helper that emits TLS metadata plus HTTP /
    Windows / SSH auth, SMB shares, RPC, DNS, and `ProcessCommandLine`
@@ -55,6 +56,37 @@ Do **not** use this skill to:
 
 ---
 
+## Known limitation — requires a shared filesystem
+
+**This skill only works where the MCP server and your shell run on the same
+machine.** That is true in Claude Code (terminal) and false in Cowork, where
+bash runs in an isolated Linux VM. Verified 2026-08-24:
+
+| | Claude Code | Cowork |
+|---|---|---|
+| MCP server writes the capture to | the Mac's `/tmp/vectra-pcap/` | the Mac's `/tmp/vectra-pcap/` |
+| `pcap-context.sh` runs on | the Mac — same host, path resolves | a Linux VM whose `/tmp` is its own |
+| `tshark` available | yes, via `brew install wireshark` | **no, and cannot be installed** — no root, `no_new_privs` set |
+
+Two independent blockers in Cowork, so no configuration rescues it: the capture
+is unreachable *and* the analysis binary cannot be installed. Sharing the
+capture through a connected folder would fix the first and not the second.
+
+Historical note, because it explains a design that otherwise looks wrong: the
+tool used to return base64 of the whole capture inline, and this skill told you
+to `echo` it into `base64 -d`. That was a workaround for exactly this host
+split — re-emitting the bytes was the only way to get them across a filesystem
+boundary. It was abandoned because it only worked on trivially small captures
+and because the chain-of-custody `shasum` ran *downstream* of the
+transcription, fingerprinting whatever came through rather than what Vectra
+sent. The path-based contract is correct on a shared host and removes the
+Cowork path entirely rather than pretending to support it.
+
+**Open for future discussion**, not currently blocking: a pure-Python triage
+fallback (scapy or dpkt, installable without root) would make the skill work in
+sandboxed hosts, at the cost of reimplementing the tshark field extraction. Not
+worth doing until someone actually needs PCAP triage from Cowork.
+
 ## Prerequisites
 
 | Requirement | Notes |
@@ -93,31 +125,58 @@ Call the MCP tool directly:
 vectra-ai-mcp:get_detection_pcap  detection_id=<id>
 ```
 
-The tool returns a string containing the base64-encoded PCAP bytes
-(prefixed with a `"PCAP data for detection ID <id>:"` preamble).
+The server writes the capture to disk and returns **metadata only** — the
+packets never enter the conversation:
 
-**Decode and write to disk:**
-
-```bash
-# 1. Strip the preamble line, keep only the base64 body.
-# 2. Decode to binary and write the .pcap file.
-# 3. Fingerprint for chain-of-custody.
-
-echo "<base64 body from MCP response>" | base64 -d > /tmp/detection-12345.pcap
-shasum -a 256 /tmp/detection-12345.pcap
+```json
+{
+  "detection_id": 19574,
+  "pcap_available": true,
+  "path": "/tmp/vectra-pcap/detection-19574.pcap",
+  "size_bytes": 481203,
+  "sha256": "9f2c…",
+  "format": "pcap"
+}
 ```
 
-If the MCP tool returns `"No pcap data found"` or similar, the
-detection has no PCAP — see [Cloud vs. network detections](#cloud-vs-network-detections).
+Take `path` and go straight to step 3. **Do not read the file into context**
+and do not try to reconstruct it — there is nothing to decode.
+
+> Earlier versions returned base64 of the whole capture inline, and this step
+> told you to `echo` that body into `base64 -d`. That meant re-emitting every
+> byte of a packet capture as a shell argument: unusable beyond a trivial size,
+> and it put the chain of custody *downstream* of the transcription. The
+> `sha256` above is taken on the bytes as received from Vectra, so verifying it
+> now proves the file matches what Vectra sent:
+>
+> ```bash
+> shasum -a 256 /tmp/vectra-pcap/detection-19574.pcap
+> ```
+>
+> A mismatch means the file changed after download — not that the copy is fine.
+
+Two fields are worth checking before spending time on analysis:
+
+- **`pcap_available: false`** — the detection has no PCAP. See
+  [Cloud vs. network detections](#cloud-vs-network-detections).
+- **`format: "unrecognised"`** with a `warning` — the file does not start with
+  a pcap/pcapng magic number, so it is probably truncated or an error body
+  saved verbatim. `tshark` will fail confusingly on it; re-pull instead of
+  debugging the filter.
+
+If the returned `path` does not exist from your shell, the MCP server is
+running on a different host or container than your tools. That is a deployment
+issue, not a PCAP issue — fall back to downloading the capture from the Vectra
+UI and run step 3 against the local file.
 
 ### 3. Run the structured triage pass
 
 ```bash
 # Human-readable summary plus full JSON dump at the end:
-./scripts/pcap-context.sh /tmp/detection-12345.pcap
+./scripts/pcap-context.sh /tmp/vectra-pcap/detection-19574.pcap
 
 # JSON only — pipe to jq / a hunt pipeline / a report:
-./scripts/pcap-context.sh --json /tmp/detection-12345.pcap | jq .
+./scripts/pcap-context.sh --json /tmp/vectra-pcap/detection-19574.pcap | jq .
 ```
 
 The script emits one capture-wide JSON document with these top-level

@@ -23,7 +23,9 @@ the verdict.**
    `source` before pulling. The MCP `get_detection_pcap` tool returns
    406 for cloud / log-based detections.
 2. **Hand off to `vectra-pcap`** — pull the capture via the MCP
-   `get_detection_pcap` tool, decode to disk, run the structured
+   `get_detection_pcap` tool, which writes it to disk and returns the
+   path (nothing to decode; never read the file into context), then run
+   the structured
    `tshark` triage pass (TLS Client Hello tuples — SNI / JA3 /
    cipher / ALPN, JA4 when the plugin is available; HTTP auth;
    NTLM / Kerberos; SMB shares; RPC bindings; DNS history; SSH; any
