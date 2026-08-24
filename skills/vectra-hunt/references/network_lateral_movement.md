@@ -21,11 +21,14 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.smb_mapping._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND (CONTAINS(path, 'ADMIN$') OR CONTAINS(path, 'C$') OR CONTAINS(path, 'IPC$')
-       OR CONTAINS(UPPER(path), '\\ADMIN$') OR CONTAINS(UPPER(path), '\\C$'))
-  -- Optional: AND id.orig_h = '{src_ip}'
+  AND (path LIKE '%ADMIN$%' OR path LIKE '%C$%' OR path LIKE '%IPC$%'
+       OR UPPER(path) LIKE '%\\ADMIN$%' OR UPPER(path) LIKE '%\\C$%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND id.orig_h = '{src_ip}'`
 
 ## SMB Files — `network.smb_files._all`
 Schema: `vectra://resources/schemas/network/network.smb_files._all.md`
@@ -51,9 +54,12 @@ FROM network.smb_files._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND (action = 'SMB::WRITE' OR action = 'SMB::FILE_DELETE' OR action = 'SMB::FILE_RENAME')
-  -- Optional: AND id.orig_h = '{src_ip}'
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND id.orig_h = '{src_ip}'`
 
 ---
 
@@ -83,10 +89,13 @@ FROM network.kerberos._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND request_type = 'TGS'
-  AND (CONTAINS(LOWER(ticket_cipher), 'rc4') OR CONTAINS(LOWER(ticket_cipher), 'des'))
-  -- Optional: AND id.orig_h = '{src_ip}'
+  AND (LOWER(ticket_cipher) LIKE '%rc4%' OR LOWER(ticket_cipher) LIKE '%des%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND id.orig_h = '{src_ip}'`
 
 ### 3. Failed Kerberos — Brute force / password spraying
 ```sql
@@ -96,9 +105,12 @@ FROM network.kerberos._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND success = false
-  -- Optional: AND id.orig_h = '{src_ip}'
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND id.orig_h = '{src_ip}'`
 
 ### 4. Kerberos for User
 ```sql
@@ -108,7 +120,7 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.kerberos._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(LOWER(client), LOWER('{username}'))
+  AND LOWER(client) LIKE LOWER('%{username}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -135,9 +147,12 @@ FROM network.ntlm._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND success = false
-  -- Optional: AND id.orig_h = '{src_ip}'
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND id.orig_h = '{src_ip}'`
 
 ### 3. NTLM for User — Track user authentication
 ```sql
@@ -146,7 +161,7 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.ntlm._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(LOWER(username), LOWER('{username}'))
+  AND LOWER(username) LIKE LOWER('%{username}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -160,9 +175,12 @@ FROM network.ntlm._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND success = true
-  -- Optional: AND id.orig_h = '{src_ip}'
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND id.orig_h = '{src_ip}'`
 
 ---
 
@@ -189,9 +207,12 @@ FROM network.ldap._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND result_count >= {min_result_count}
-  -- Optional: AND id.orig_h = '{src_ip}'
 ORDER BY result_count DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND id.orig_h = '{src_ip}'`
 
 ### 3. Hunt by Base Object — Specific OU queries
 ```sql
@@ -201,7 +222,7 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.ldap._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(UPPER(base_object), UPPER('{base_object}'))
+  AND UPPER(base_object) LIKE UPPER('%{base_object}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -214,14 +235,15 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.ldap._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND (CONTAINS(UPPER(attributes), 'MS-MCS-ADMPWD')
-       OR CONTAINS(UPPER(attributes), 'SERVICEPRINCIPALNAME')
-       OR CONTAINS(UPPER(attributes), 'USERPASSWORD')
-       OR CONTAINS(UPPER(attributes), 'UNICODEPWD')
-       OR CONTAINS(UPPER(attributes), 'NTPWDHISTORY'))
-  -- Optional: AND id.orig_h = '{src_ip}'
+  AND ANY_MATCH(attributes, a -> UPPER(a) IN (
+        'MS-MCS-ADMPWD', 'SERVICEPRINCIPALNAME', 'USERPASSWORD',
+        'UNICODEPWD', 'NTPWDHISTORY'))
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND id.orig_h = '{src_ip}'`
 
 ---
 
@@ -247,9 +269,12 @@ FROM network.rdp._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND local_orig = true AND local_resp = true
-  -- Optional: AND id.orig_h = '{src_ip}'
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND id.orig_h = '{src_ip}'`
 
 ### 3. Hunt by Client Name
 ```sql
@@ -258,7 +283,7 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.rdp._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(UPPER(client_name), UPPER('{client_name}'))
+  AND UPPER(client_name) LIKE UPPER('%{client_name}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -296,7 +321,7 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.dce_rpc._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(LOWER(endpoint), LOWER('{endpoint}'))
+  AND LOWER(endpoint) LIKE LOWER('%{endpoint}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -308,7 +333,7 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.dce_rpc._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(LOWER(operation), LOWER('{operation}'))
+  AND LOWER(operation) LIKE LOWER('%{operation}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -319,9 +344,12 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.dce_rpc._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND (CONTAINS(LOWER(endpoint), 'svcctl')
-       OR CONTAINS(LOWER(endpoint), 'drsuapi')
-       OR CONTAINS(LOWER(endpoint), 'atsvc'))
-  -- Optional: AND id.orig_h = '{src_ip}'
+  AND (LOWER(endpoint) LIKE '%svcctl%'
+       OR LOWER(endpoint) LIKE '%drsuapi%'
+       OR LOWER(endpoint) LIKE '%atsvc%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND id.orig_h = '{src_ip}'`

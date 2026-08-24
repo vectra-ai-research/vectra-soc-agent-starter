@@ -184,7 +184,7 @@ SELECT id.orig_h AS src_ip, orig_hostname.name AS host, named_pipe, endpoint, op
 FROM network.dce_rpc._all
 WHERE dt > date_add('hour', -336, now())
   AND timestamp BETWEEN date_add('hour', -336, now()) AND now()
-  AND CONTAINS(LOWER(named_pipe), 'msagent_')
+  AND LOWER(named_pipe) LIKE '%msagent_%'
 GROUP BY 1, 2, 3, 4, 5
 LIMIT 500
 ```

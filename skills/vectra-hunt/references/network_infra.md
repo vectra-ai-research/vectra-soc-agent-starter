@@ -27,9 +27,12 @@ FROM network.ssh._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND local_resp = true AND local_orig = false
-  -- Optional: AND id.resp_h = '{dst_ip}'
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND id.resp_h = '{dst_ip}'`
 
 ### 3. Hunt by HASSH — Known-bad SSH client (e.g. Impacket)
 ```sql
@@ -51,7 +54,7 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.ssh._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(LOWER(cipher_alg), LOWER('{cipher}'))
+  AND LOWER(cipher_alg) LIKE LOWER('%{cipher}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -78,7 +81,7 @@ SELECT timestamp, orig_hostname, assigned_ip, mac, server_addr, lease_time, uid
 FROM network.dhcp._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(UPPER(orig_hostname), UPPER('{hostname}'))
+  AND UPPER(orig_hostname) LIKE UPPER('%{hostname}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -98,7 +101,7 @@ SELECT timestamp, orig_hostname, assigned_ip, mac, server_addr, lease_time, uid
 FROM network.dhcp._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(LOWER(mac), LOWER('{mac_address}'))
+  AND LOWER(mac) LIKE LOWER('%{mac_address}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -138,9 +141,12 @@ FROM network.radius._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND result = 'Access-Reject'
-  -- Optional: AND id.orig_h = '{src_ip}'
 ORDER BY timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND id.orig_h = '{src_ip}'`
 
 ### 3. RADIUS for User
 ```sql
@@ -150,7 +156,7 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.radius._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(LOWER(username), LOWER('{username}'))
+  AND LOWER(username) LIKE LOWER('%{username}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -235,9 +241,12 @@ FROM network.match._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
   AND alert.severity <= 2
-  -- Optional: AND id.orig_h = '{src_ip}'
 ORDER BY alert.severity ASC, timestamp DESC LIMIT {limit}
 ```
+
+**Optional filters** — add inside the `WHERE` clause as needed:
+
+- `AND id.orig_h = '{src_ip}'`
 
 ### 3. Hunt by Signature (ET MALWARE, Cobalt Strike, etc.)
 ```sql
@@ -247,7 +256,7 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.match._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(UPPER(alert.signature), UPPER('{signature}'))
+  AND UPPER(alert.signature) LIKE UPPER('%{signature}%')
 ORDER BY alert.severity ASC, timestamp DESC LIMIT {limit}
 ```
 
@@ -259,6 +268,6 @@ SELECT timestamp, id.orig_h, id.resp_h, id.resp_p,
 FROM network.match._all
 WHERE dt > date_add('hour', -{hours_back}, now())
   AND timestamp BETWEEN date_add('hour', -{hours_back}, now()) AND now()
-  AND CONTAINS(UPPER(alert.category), UPPER('{category}'))
+  AND UPPER(alert.category) LIKE UPPER('%{category}%')
 ORDER BY alert.severity ASC, timestamp DESC LIMIT {limit}
 ```
