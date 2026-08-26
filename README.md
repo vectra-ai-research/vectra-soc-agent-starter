@@ -18,7 +18,7 @@ platform — wired together end-to-end:
 | Pillar | What it is | Where it lives |
 |--------|------------|----------------|
 | **1. LLM** | The reasoning engine (Claude, GPT, Gemini, …). You bring your own. | Provided by your agent host (Claude Code, Codex, Goose, …) |
-| **2. MCP server** | A bridge that exposes the Vectra REST + Investigation Query APIs as **tools** the LLM can call. | External — installed from [`vectra-ai-research/vectra-ai-mcp-server`](https://github.com/vectra-ai-research/vectra-ai-mcp-server) via `uvx` |
+| **2. MCP server** | A bridge that exposes the Vectra REST + Investigation Query APIs as **tools** the LLM can call. | External — installed from [`vectra-ai-research/vectra-ai-mcp-server`](https://github.com/vectra-ai-research/vectra-ai-mcp-server) via `uvx`. **Requires ≥ 0.4.0** — see [minimum server version](install/README.md#minimum-server-version--040) |
 | **3. Agent SKILLS** | Domain-specific playbooks the agent loads on demand: SOC workflows, SQL recipes, report definitions, threat-hunt orchestration. | [`skills/`](skills/) in this repo |
 | **4. `AGENTS.md`** | The top-level instruction set that tells the agent *who it is*, *which skills exist*, and *when to use which*. | [`AGENTS.md`](AGENTS.md) at the repo root |
 

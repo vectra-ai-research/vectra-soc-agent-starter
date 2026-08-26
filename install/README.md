@@ -66,6 +66,29 @@ The server is a **separate project** maintained by Vectra at
 it here — we just register it in each agent host's config so the host can
 launch it on demand.
 
+### Minimum server version — **0.4.0**
+
+> The version number below assumes 0.4.0 is the next server release. If it ships
+> under a different number, correct this section — the requirement is real
+> regardless of what it ends up being called.
+
+The skills in this repo call tools that older servers do not have. Five of them
+arrived after 0.3.2:
+
+| Tool | Used by |
+|---|---|
+| `close_detections` | verdict framework, bulk detection consolidation |
+| `reopen_detections` | verdict framework |
+| `get_detection_history` | detection pivot workflow |
+| `set_detection_workflow_state` | ticket correlation |
+| `add_member_to_group` | scoped triage rules |
+
+**What it looks like on an older server:** the agent finds the skill, follows
+the playbook, and then a tool call fails with an unknown-tool error partway
+through an investigation. Nothing announces a version mismatch. If you see an
+agent confidently start work and then fail on `close_detections`, this is why —
+upgrade the server rather than debugging the skill.
+
 The recommended install method is `uvx`, which fetches the published package
 into an isolated environment with no clone, no venv, and no Docker:
 
@@ -79,8 +102,14 @@ If the package isn't on PyPI yet for your environment, use the Git form:
 uvx --from git+https://github.com/vectra-ai-research/vectra-ai-mcp-server vectra-ai-mcp-server
 ```
 
-Pin a specific version in production by appending `@<version>`
-(e.g. `vectra-ai-mcp-server@0.2.0`).
+**Pin a version in production**, appending `@<version>`:
+
+```bash
+uvx vectra-ai-mcp-server@0.4.0
+```
+
+Pin at or above the minimum above. Pinning lower gets you a stable server and
+skills that reference tools it does not expose.
 
 The credentials are passed in via the host's `env` block, **not** a `.env`
 file (`uvx` doesn't load `.env`). The three required values are:
