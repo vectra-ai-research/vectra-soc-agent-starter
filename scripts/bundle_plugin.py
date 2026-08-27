@@ -17,13 +17,30 @@ Profiles
               checkout and switch branches freely. This is the profile for
               iterating: it also avoids two known plugin bugs (see below).
 
+    beta      Includes `mcpServers`, pinned to a **Git ref** of the server
+              repo and fetched by uvx. This is the profile for handing one
+              .zip to a beta tester: nothing to clone, no JSON to hand-edit,
+              and the host prompts for their own tenant credentials. Requires
+              --server-git-ref. Use when the server capability a tester needs
+              is on a branch and not yet on PyPI.
+
     release   Includes `mcpServers`, pinned to an exact published version.
               Requires --server-version, which MUST already be on PyPI --
               shipping skills that call tools the pinned server lacks is the
               failure this flag exists to prevent.
 
-    --server-path /abs/path may be given with either profile to point
-    `mcpServers` at a local source checkout instead of a published package.
+    --server-path /abs/path may be given with dev to point `mcpServers` at a
+    local source checkout. It bakes in an absolute path, so it produces a
+    bundle that only works on the machine that built it -- never send one.
+
+Why beta exists
+---------------
+The three older options each fail the "send a tester one file" case:
+dev makes them hand-configure a connector (and get the --from argument right);
+release refuses anything not on PyPI, which is the whole point of a beta; and
+--server-path embeds a path that will not exist on their disk. beta pairs the
+branch skills with the branch server inside a single artifact, which is also
+the pairing the tester is most likely to get wrong by hand.
 
 Why AGENTS.md is copied into the bundle
 ---------------------------------------
@@ -45,6 +62,8 @@ Usage
 -----
     python scripts/bundle_plugin.py                       # dev bundle
     python scripts/bundle_plugin.py --server-path "$PWD/../vectra-ai-mcp-server"
+    python scripts/bundle_plugin.py --profile beta --server-git-ref test/integration
+    python scripts/bundle_plugin.py --profile beta --server-git-ref f2ce531   # reproducible
     python scripts/bundle_plugin.py --profile release --server-version 0.4.0
 """
 
@@ -63,6 +82,20 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PLUGIN_SRC = REPO_ROOT / "plugin"
 SKILLS_DIR = REPO_ROOT / "skills"
 DIST_DIR = REPO_ROOT / "dist"
+
+SERVER_REPO = "https://github.com/vectra-ai-research/vectra-ai-mcp-server"
+STARTER_REPO = "https://github.com/vectra-ai-research/vectra-soc-agent-starter"
+
+# A 40-char hex string is a full commit SHA; anything else (branch, tag, short
+# SHA) is a name that can move or be ambiguous. Used only to decide whether to
+# warn -- uvx accepts all of these.
+FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+
+CRED_ENV = {
+    "VECTRA_BASE_URL": "${user_config.vectra_base_url}",
+    "VECTRA_CLIENT_ID": "${user_config.vectra_client_id}",
+    "VECTRA_CLIENT_SECRET": "${user_config.vectra_client_secret}",
+}
 
 # PACKAGING.md "MCP-only" mode: everything that needs no local Python venv.
 # vectra-reports is excluded (Python engine); vectra-reports-mcp is its
@@ -167,6 +200,40 @@ def install_agents_md(staged: Path, agents: Path, skills: list[str]) -> None:
                 md.write_text(new)
 
 
+def rewrite_excluded_skill_links(staged: Path, shipped: list[str]) -> int:
+    """Point links at skills this bundle omits to the repo instead.
+
+    Every shipped skill references `../vectra-reports/SKILL.md` -- it's offered
+    as the Python-engine alternative to vectra-reports-mcp. The MCP-only bundle
+    deliberately excludes vectra-reports (it needs a local venv), so those
+    relative paths resolve to nothing once installed.
+
+    Left alone this is worse than a broken hyperlink: the agent is told a
+    sibling skill exists, tries to read it, and gets a missing file with no
+    explanation. Rewriting to an absolute URL keeps the cross-reference
+    honest -- the skill is real, it just isn't here. Each of these references
+    names vectra-reports-mcp in the same breath, which *is* in the bundle, so
+    the agent still has a working path.
+
+    Returns the number of files changed.
+    """
+    changed = 0
+    for md in (staged / "skills").rglob("*.md"):
+        text = md.read_text()
+
+        def _sub(m: re.Match) -> str:
+            name = m.group(2)
+            if name in shipped:
+                return m.group(0)
+            return f"{STARTER_REPO}/blob/main/skills/{name}/SKILL.md"
+
+        new = re.sub(r"((?:\.\./)+)([a-z0-9-]+)/SKILL\.md", _sub, text)
+        if new != text:
+            md.write_text(new)
+            changed += 1
+    return changed
+
+
 def check_dangling_links(staged: Path, shipped: list[str]) -> list[str]:
     """Report cross-skill links pointing at skills not in this bundle."""
     warnings = []
@@ -202,11 +269,20 @@ def build_mcp_json(args) -> dict | None:
                     "command": "uv",
                     "args": ["--directory", str(server_path), "run",
                              "vectra-ai-mcp-server"],
-                    "env": {
-                        "VECTRA_BASE_URL": "${user_config.vectra_base_url}",
-                        "VECTRA_CLIENT_ID": "${user_config.vectra_client_id}",
-                        "VECTRA_CLIENT_SECRET": "${user_config.vectra_client_secret}",
-                    },
+                    "env": dict(CRED_ENV),
+                }
+            }
+        }
+
+    if args.server_git_ref:
+        return {
+            "mcpServers": {
+                "vectra-ai-mcp": {
+                    "type": "stdio",
+                    "command": "uvx",
+                    "args": ["--from", f"git+{SERVER_REPO}@{args.server_git_ref}",
+                             "vectra-ai-mcp-server"],
+                    "env": dict(CRED_ENV),
                 }
             }
         }
@@ -221,13 +297,19 @@ def build_mcp_json(args) -> dict | None:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0],
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--profile", choices=["dev", "release"], default="dev")
+    p.add_argument("--profile", choices=["dev", "beta", "release"], default="dev")
     p.add_argument("--server-version",
                    help="exact published vectra-ai-mcp-server version to pin "
                         "(required for --profile release)")
+    p.add_argument("--server-git-ref",
+                   help="branch, tag or commit SHA of the vectra-ai-mcp-server "
+                        "repo; mcpServers fetches it with uvx --from git+... "
+                        "(required for --profile beta). Prefer a full commit "
+                        "SHA for a reproducible bundle")
     p.add_argument("--server-path",
                    help="absolute path to a local vectra-ai-mcp-server checkout; "
-                        "points mcpServers at it instead of a published package")
+                        "points mcpServers at it instead of a published package. "
+                        "Machine-specific -- do not send the result to anyone")
     p.add_argument("--plugin-version",
                    help="override the version in plugin/plugin.json")
     p.add_argument("--skills", nargs="+", default=DEFAULT_SKILLS,
@@ -237,7 +319,14 @@ def main() -> int:
                    help="downgrade dangling cross-skill links to a warning")
     args = p.parse_args()
 
+    if args.server_git_ref and args.server_path:
+        fail("--server-git-ref and --server-path both define mcpServers; pick one")
+
     if args.profile == "release":
+        if args.server_git_ref:
+            fail("--profile release means a published package. A Git ref is not "
+                 "a release -- use --profile beta, or publish the version first "
+                 "and pass --server-version.")
         if not args.server_version and not args.server_path:
             fail("--profile release requires --server-version (an exact version "
                  "that is already published to PyPI). Shipping skills against an "
@@ -245,6 +334,16 @@ def main() -> int:
         if args.server_path:
             fail("--server-path produces a machine-specific bundle and cannot be "
                  "combined with --profile release")
+
+    if args.profile == "beta":
+        if not args.server_git_ref:
+            fail("--profile beta requires --server-git-ref, e.g.\n"
+                 "         --server-git-ref test/integration\n"
+                 "       The point of a beta bundle is that the skills and the "
+                 "server come from the same branch.")
+        if args.server_version:
+            fail("--server-version pins a PyPI release; --profile beta pins a "
+                 "Git ref. Passing both is ambiguous.")
 
     manifest = json.loads((PLUGIN_SRC / "plugin.json").read_text())
     version = args.plugin_version or manifest["version"]
@@ -254,6 +353,13 @@ def main() -> int:
         # already-installed, and you end up testing the previous build while
         # reading the new source. That cost two full test cycles on 2026-08-23.
         version = f"{version}-dev.{datetime.now(timezone.utc):%Y%m%d%H%M}"
+    elif args.profile == "beta":
+        # Same reasoning as the dev stamp, and it matters more here: a branch
+        # ref moves, so two beta bundles cut a day apart are different software
+        # under an identical version string. Semver prerelease identifiers
+        # allow only [0-9A-Za-z-], so the ref is slugified.
+        slug = re.sub(r"[^0-9A-Za-z-]+", "-", args.server_git_ref).strip("-")
+        version = f"{version}-beta.{slug}.{datetime.now(timezone.utc):%Y%m%d%H%M}"
     manifest["version"] = version
     if args.profile == "dev" and not args.server_path:
         # No server declared, so userConfig would prompt for Vectra credentials
@@ -289,6 +395,9 @@ def main() -> int:
              "the safety guardrails and the bundle would ship without them")
     install_agents_md(staged, agents, args.skills)
 
+    # Must run before check_dangling_links, which is what catches these.
+    n_rewritten = rewrite_excluded_skill_links(staged, args.skills)
+
     mcp = build_mcp_json(args)
     if mcp is not None:
         (staged / ".mcp.json").write_text(json.dumps(mcp, indent=2) + "\n")
@@ -309,11 +418,21 @@ def main() -> int:
         for d in dangling:
             print(f"{label}: dangling cross-skill link: {d}", file=sys.stderr)
         if label == "error":
-            fail("dangling cross-skill links in a release bundle "
-                 "(pass --allow-dangling to override)")
+            fail(f"dangling cross-skill links in a {args.profile} bundle "
+                 "(pass --allow-dangling to override). These should have been "
+                 "rewritten to repo URLs -- if you are seeing this, the link "
+                 "form is one rewrite_excluded_skill_links does not match.")
 
     # ---- archive ---------------------------------------------------------
-    suffix = "dev" if args.profile == "dev" else version
+    if args.profile == "dev":
+        suffix = "dev"
+    elif args.profile == "beta":
+        # Readable filename for something being handed to a person; the unique
+        # timestamp lives in the manifest version, which is what an installer
+        # actually compares.
+        suffix = f"beta-{re.sub(r'[^0-9A-Za-z-]+', '-', args.server_git_ref).strip('-')}"
+    else:
+        suffix = version
     archive = args.output / f"vectra-soc-{suffix}.zip"
     if archive.exists():
         archive.unlink()
@@ -336,10 +455,33 @@ def main() -> int:
     print(f"  skills:   {', '.join(args.skills)}")
     print(f"  commands: {len(list((PLUGIN_SRC / 'commands').glob('*.md')))}")
     print(f"  mcp:      {'declared' if mcp else 'not declared (supply your own connector)'}")
+    if args.server_git_ref:
+        print(f"  server:   git+{SERVER_REPO}@{args.server_git_ref}")
+    elif args.server_version:
+        print(f"  server:   vectra-ai-mcp-server=={args.server_version} (PyPI)")
     print(f"  files:    {n_files}")
+    if n_rewritten:
+        print(f"  links:    {n_rewritten} file(s) had links to omitted skills "
+              f"rewritten to repo URLs")
+
     if args.profile == "dev":
         print("\n  dev bundle -- do not publish. Install it, then point your own")
         print("  vectra-ai-mcp connector at the checkout you want to test.")
+
+    if args.profile == "beta":
+        print("\n  beta bundle -- self-contained. The tester installs this one file")
+        print("  and is prompted for their own tenant URL, client ID and secret.")
+        if not FULL_SHA_RE.match(args.server_git_ref):
+            print(f"\n  NOTE: '{args.server_git_ref}' is a moving ref, not a full commit SHA.")
+            print("  uv caches a resolved Git revision, so a tester who installed")
+            print("  earlier may keep running an older commit even after you push.")
+            print("  Two consequences worth knowing before you send this:")
+            print("    - 'it works for me' and 'it fails for them' can both be true")
+            print("      while you are looking at different code.")
+            print("    - to force a refresh they need:  uv cache clean vectra-ai-mcp-server")
+            print("  For a bundle you can reason about later, pin the SHA instead:")
+            print("    git -C ../vectra-ai-mcp-server rev-parse test/integration")
+            print("    python scripts/bundle_plugin.py --profile beta --server-git-ref <sha>")
     return 0
 
 
