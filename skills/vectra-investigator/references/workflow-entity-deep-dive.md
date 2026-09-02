@@ -111,7 +111,7 @@ For each gap you are about to report:
 | Outcome | Meaning |
 |---|---|
 | **CLOSED** | You got the answer. Fold it into the findings — and re-check whether it changes the verdict or the recommended action. |
-| **NO DATA** | The query worked and returned nothing. **Prove it with a control query** on the same table over a window where you expect rows. An empty result you cannot distinguish from a broken feed is not a finding. |
+| **NO DATA** | The query worked and returned nothing. **Prove it with a control query** — see *Prove every empty result with a control query* below. An empty result you cannot distinguish from a broken feed is not a finding. |
 | **BLOCKED** | A permission or scope error. **Quote the scope verbatim** — "requires `NGSIEM:write`" is actionable; "insufficient permissions" is not. |
 | **OUT OF REACH** | No connected telemetry could answer it. Say which telemetry would. |
 
@@ -147,6 +147,58 @@ Both rules are in force and they are not in conflict:
   work to a human who has less tooling than you do.
 
 Escalate what you cannot resolve. Resolve what you can.
+
+---
+
+## Prove every empty result with a control query
+
+**A query that returns nothing has told you nothing until you have proved the
+table would have answered.** Zero rows has two causes that look identical in the
+output: the activity did not happen, or you cannot see it. Only one of them is a
+finding.
+
+Observed on `O365:virginia-choi-02` on 2026-09-02: a query for SharePoint file
+downloads in the compromise window returned zero rows. Written up as-is, that
+becomes "no files were exfiltrated" — the sentence the operator most wants to
+read, and it would have been false. The control query showed
+`office365.sharepoint` holds **two rows for the entire tenant across all
+time**. The table is barely populated. The correct finding was not "nothing was
+taken" but "we have no visibility into what was taken", and it changed the
+recommended action from *monitor* to *rotate credentials and assume access*.
+
+### The control
+
+Re-run the same query against the same table with the entity predicate and the
+time window removed, and no filter but a `LIMIT`:
+
+```sql
+SELECT count(*) AS rows_all_time FROM office365.sharepoint._all WHERE dt > date_add('day', -90, now()) LIMIT 1
+```
+
+Then read the result against three cases:
+
+| Control returns | What your zero means | How to write it |
+|---|---|---|
+| Substantial rows, and rows in your window for **other** entities | The activity did not happen | State it as a **negative finding** — it is evidence, and it is worth having |
+| Substantial rows, but none anywhere near your window | The feed has a gap in time | **NO DATA**, and name the window that is missing |
+| Few or no rows at all | The table is not meaningfully populated for this tenant | **NO DATA** — and say the table is empty, not that the activity is absent |
+
+### The rule
+
+Never write "no evidence of X" from an empty result alone. Either the control
+supports it — in which case say so and cite the control — or the outcome is
+**NO DATA** and the gap goes in the report.
+
+**This applies hardest to the queries whose zero is reassuring.** Exfiltration,
+data access, credential use, downloads. An empty result on a question the
+operator is afraid of is exactly where a silent visibility gap does the most
+damage, because nobody challenges good news.
+
+### It costs one query
+
+The control is cheaper than every other step in this workflow — one aggregate,
+no window, no join. There is no case where the evidence was too expensive to
+check.
 
 ---
 
