@@ -260,3 +260,70 @@ question is not "what did it do" but "who reached it".**
 endpoint mapper), `3389` (RDP), `5985` (WinRM). Widen if the environment uses
 others; a zero result across all of them is itself a finding worth stating —
 it means the ingress was not lateral, and the host was reached some other way.
+
+---
+
+## An identifier means nothing without its tenant
+
+**Every entity ID and detection ID is scoped to one tenant.** The same
+identifier exists in other tenants and points at something else entirely — so
+a stale ID does not produce an error. It produces a confident answer about the
+wrong thing.
+
+Measured across two tenants on 2026-09-02:
+
+| Entity | Tenant A (`209437179984.uw2`) | Tenant B (`109796245472.ew1`) |
+|---|---|---|
+| `virginia-choi-02.northstar@…` | account **3511** | account **3553** |
+| `adam_admin@fictotech.com` | account **3529** | account **3575** |
+
+The ranges **overlap**. `3553` is a real account in tenant A as well — a
+different person. An analyst carrying "investigate account 3553" over from
+yesterday's notes gets a complete, plausible investigation of the wrong
+identity, and nothing in the output says so.
+
+### Within one tenant, IDs are stable — so this is not a reason to distrust them
+
+Checked deliberately, because the opposite assumption leads to re-deriving
+everything on every turn. In the same tenant five days after an investigation:
+
+- detection `19813` was still Hidden HTTPS Tunnel on `jump-station5` (107073),
+  same 117 sessions to `40.121.154.127`, same byte counts, same 5 / 5 scores
+- account `3553` was still `O365:virginia-choi-02.northstar@…`
+
+An ID obtained **in this conversation, from this tenant** is trustworthy. The
+risk is entirely about identifiers that arrive from somewhere else.
+
+### The rule
+
+1. **Before acting on any identifier you did not obtain in this conversation,
+   confirm the tenant.** Call `get_active_profile` when it is available; it
+   reports the profile name, tenant URL and API client id and cannot change
+   them. In a multi-tenant deployment, the tool name prefix carries the tenant
+   instead.
+2. **Resolve by name, then use the ID it returns.**
+   `lookup_entity_info_by_name` costs one call and removes the whole class of
+   error. This is why the pipeline in this workflow starts with a lookup rather
+   than accepting an ID.
+3. **Never carry an ID between tenants**, including from a report, a ticket, a
+   note, or an earlier conversation. Re-resolve the name.
+4. **Write the tenant into anything you leave behind.** A note or verdict
+   citing "account 3553" is ambiguous the moment a second tenant exists; the
+   tenant URL or profile name makes it durable.
+
+### Names are safer, but they are not identical either
+
+The same user is `O365:virginia-choi-02.northstar@…` in one tenant and
+`virginia-choi-02.northstar@…` in the other — the prefix differs because the
+account types differ (`o365` versus `o365` + `entra_principal`). So a name
+lookup can also miss across tenants. Use partial matching, and check what came
+back rather than assuming the first hit is the entity you meant.
+
+### Detections accumulate; they do not update
+
+A recurring behaviour produces **new detection IDs**, it does not renumber the
+old one. `Piper-desktop` carried detections up to `19794` during an
+investigation and `19866` / `19867` five days later, with the earlier ones
+unchanged. So "the Kerberoasting detection, 19794" names one past occurrence,
+not the current state of that behaviour — which is the same reason recurrence
+is read from `last_timestamp` rather than by hunting for a second detection.
