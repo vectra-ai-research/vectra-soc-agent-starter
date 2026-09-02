@@ -87,3 +87,124 @@ alone.
   (TP-Low).
 - Insufficient evidence after ~15 min → **NMD**, name the gap and the
   next pivot (EDR, SIEM, identity, ticket the asset owner).
+
+---
+
+## Close the gaps before you report them
+
+**A gap you have named is a task, not a caveat.** Before writing "need more
+data", check whether the data is reachable with the tools already connected. On
+2026-09-01 this step was missing, and an investigation of jump-station5 shipped
+three open questions — two of which closed on the first attempt, and one of which
+**overturned the containment advice**. The report told the operator to revoke an
+AWS access key that CloudTrail showed the intruder had deleted themselves one
+minute after it failed.
+
+### The loop
+
+For each gap you are about to report:
+
+1. **Name the telemetry that would close it** — a table, an endpoint, a tool.
+2. **Try it.** One query or one call. Do not ask permission to *read*.
+3. **Record the outcome as one of four:**
+
+| Outcome | Meaning |
+|---|---|
+| **CLOSED** | You got the answer. Fold it into the findings — and re-check whether it changes the verdict or the recommended action. |
+| **NO DATA** | The query worked and returned nothing. **Prove it with a control query** on the same table over a window where you expect rows. An empty result you cannot distinguish from a broken feed is not a finding. |
+| **BLOCKED** | A permission or scope error. **Quote the scope verbatim** — "requires `NGSIEM:write`" is actionable; "insufficient permissions" is not. |
+| **OUT OF REACH** | No connected telemetry could answer it. Say which telemetry would. |
+
+4. **Stop after two attempts per gap.** A third is a research project, not
+   triage. Report it as OUT OF REACH with what you tried.
+
+### What is automatic and what is not
+
+**Automatic — any read.** Investigation Query over any table, entity and
+detection reads, posture findings, read-only queries against other connected
+security products.
+
+**Never automatic:**
+- Anything that changes state anywhere, in any product
+- Live endpoint interaction — remote shell, script execution, file collection —
+  even when the tool is available and the operator is present
+- Anything a destructive or additive annotation marks as such
+
+State those as proposals with the exact call, and wait.
+
+**Watch for a read that needs a write scope.** The NGSIEM search above required
+`NGSIEM:write` to perform a read. Do not escalate to a write scope to satisfy a
+read — report the blocker and let the operator decide.
+
+### Why this is not the same as "uncertainty escalates"
+
+Both rules are in force and they are not in conflict:
+
+- **Uncertainty escalates** governs the *verdict*. Thin evidence still returns
+  need-more-data rather than a confident guess.
+- **Close the gaps** governs the *effort before* the verdict. Escalating a
+  question you could have answered in one query is not caution; it is passing
+  work to a human who has less tooling than you do.
+
+Escalate what you cannot resolve. Resolve what you can.
+
+---
+
+## Query the entity as a DESTINATION before reading its detections
+
+**The victim never records who attacked it. Only the attacker's entity does.**
+
+This is not a data gap — it is how entity-scoped detection works. A detection
+describes behaviour *by* an entity, so a host that was compromised holds no
+record of the compromise. Investigated alone, it looks like an independent
+intrusion that began with its own command channel.
+
+Observed on `Deacon-desktop` (107159) on 2026-09-02: all eight detections had it
+as the **source**. No inbound remote execution, no admin-share access against
+it, no service creation on it, `account_access_history` empty. The earliest
+evidence on the entity was its own C2. The host had in fact been compromised
+over SMB by another host three minutes earlier.
+
+### The query
+
+Run this **before** forming a verdict on any host:
+
+```sql
+SELECT timestamp, id.orig_h AS source_ip, orig_hostname.name AS source_host, id.resp_p AS dest_port, orig_ip_bytes AS bytes_sent, resp_ip_bytes AS bytes_received FROM network.isession._all WHERE dt > date_add('day', -14, now()) AND timestamp BETWEEN date_add('day', -14, now()) AND now() AND id.resp_h = '<THE HOST IP>' AND id.resp_p IN (445, 4444, 135, 139, 3389, 5985) ORDER BY timestamp LIMIT 60
+```
+
+One query. On Deacon it returned the ingress immediately — source host, port,
+timestamp, and a byte count that matched the upstream host's own stage-loader
+detection exactly.
+
+### Why it changes the verdict rather than decorating it
+
+Without it, the verdict names the host as the **origin** of an intrusion it was
+a **victim** of. That is wrong in a way that matters:
+
+- Containment scope is wrong — the upstream host keeps operating
+- The attribution is wrong — you brief a chain that started somewhere else
+- And the same error repeats at every hop downstream
+
+### Apply it at every hop, not just the first
+
+Each host reached by lateral movement has the same blindness. In this
+environment:
+
+```
+jump-station5   -> 10.232.100.30
+Piper-desktop   -> Deacon-desktop
+Deacon-desktop  -> dc2-aws-us-west-01
+Deacon-desktop  -> eu-db5-aws.demo.corp
+```
+
+Every host on the right of an arrow will, investigated alone, appear to be
+patient zero. **When an investigation hands you a downstream host, the first
+question is not "what did it do" but "who reached it".**
+
+### Ports to include
+
+`445` and `139` (SMB), `4444` (common reverse-shell listener), `135` (RPC
+endpoint mapper), `3389` (RDP), `5985` (WinRM). Widen if the environment uses
+others; a zero result across all of them is itself a finding worth stating —
+it means the ingress was not lateral, and the host was reached some other way.
