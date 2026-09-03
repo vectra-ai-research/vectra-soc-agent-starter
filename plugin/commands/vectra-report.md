@@ -1,5 +1,5 @@
 ---
-description: Render a named canned Vectra dashboard report (e.g. c2-beacons, top-talkers, daily-threat-summary).
+description: Render a named Vectra dashboard report (c2-beacons, top-talkers, daily-threat-summary).
 argument-hint: "[report-name] [param=value ...]"
 ---
 

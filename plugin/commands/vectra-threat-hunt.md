@@ -1,5 +1,5 @@
 ---
-description: Threat-intel hunt or ad-hoc metadata sweep over Vectra — TI report, IOC, actor, CVE, or a direct question.
+description: Hunt a TI report, IOC, actor, CVE or direct question across Vectra metadata.
 argument-hint: "<url | ioc | actor | cve | question>"
 ---
 

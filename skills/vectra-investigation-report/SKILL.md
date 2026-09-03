@@ -1,5 +1,5 @@
 ---
-name: investigation-report
+name: vectra-investigation-report
 description: Renders a completed Vectra entity investigation as one self-contained HTML report — a one-sentence answer, a relationship diagram, a graded timeline, what the sweep found, what is not established, open gaps with their outcomes, and an evidence table where every claim carries the detection ID or tool call it rests on. Use after an entity deep-dive when the user asks for the report, the assessment, the write-up, the full output, or something to hand to someone else. Not for a single detection pivot, not for dashboards, and not a substitute for the investigation itself — this skill formats findings that already exist.
 ---
 
@@ -20,17 +20,33 @@ investigation.
 contract is [`references/case-schema.md`](references/case-schema.md); the
 worked example is [`examples/piper-desktop.json`](examples/piper-desktop.json).
 
-**2. Render it.**
+**2. Render it** by calling the MCP tool:
 
-```bash
-python3 scripts/render_report.py case.json
-python3 scripts/render_report.py case.json --check      # validate, write nothing
-python3 scripts/render_report.py case.json -o out.html
+```
+render_investigation_report(case=<the case JSON as text>)
 ```
 
-Standard library only — no virtualenv, no install. Run `--check` first: it
-validates the case, lays out the diagram, and reports geometry problems
-without producing a file.
+It returns the path to a written HTML file, plus its size, a sha256, and any
+warnings. **Give the operator that path** — the report is 25–30 KB of markup
+and re-emitting it through the conversation costs more than the investigation
+did.
+
+Nothing is installed, no script is run, and no filesystem access is needed on
+your side: the server renders it. That is why this is a tool. Earlier versions
+shipped `render_report.py` inside this skill, which could never work — a plugin
+carrying a fourth file under any `skills/*/scripts/` directory silently fails
+to install, and an MCP client cannot execute Python in any case.
+
+**A rejected case file comes back as a value, not an error.** Expect
+`rendered: false` with the offending field named. That is normal traffic: fix
+the field and call again. Getting there in two attempts is fine; guessing is
+not.
+
+**Never write the HTML yourself.** If the tool is unavailable, say so and hand
+the operator the case JSON. A hand-built substitute looks like the real format
+and silently lacks its checks — no diagram geometry validation, no escaping
+guarantees, no gap-outcome vocabulary — which is worse than no report, because
+it is indistinguishable from one that was checked.
 
 ## Non-negotiables
 
@@ -152,23 +168,17 @@ cannot:
 
 ## Output
 
-**Always pass `-o` with an absolute path, and tell the operator the full path
-in your reply.**
+The tool writes the file and returns its path. **Quote that path verbatim in
+your reply** — a report the operator is told about but cannot find is not a
+deliverable. Do not paraphrase it or reconstruct it from the entity name.
 
-```bash
-python3 scripts/render_report.py case.json -o "$HOME/Investigation-Report-<entity>.html"
-```
+One file, no external references, no JavaScript, light-only on the Vectra
+palette. It opens offline, prints, and can be attached to a ticket as-is.
 
-The default is the current working directory, which is the right default for
-someone running the script by hand and the wrong one for you. When a host runs
-this skill, the working directory is the host's, not the operator's terminal —
-so a report written to a relative path is a file the operator is told about and
-cannot find. Writing it to `$HOME` and naming the path is the difference
-between a deliverable and a dead end.
+If the server runs in a container the path is inside the container. Say so
+rather than leaving the operator hunting for a file that is not on their disk.
 
-Write the case file somewhere durable too, next to the report. It is the
-investigation in structured form: cheaper to re-render than to re-derive, and
-the thing to correct and re-run when a finding turns out to be wrong.
-
-One file, no external references, no JavaScript, works offline, prints, and
-respects dark mode. Safe to attach to a ticket or an email.
+**Also give the operator the case JSON**, or tell them where you saved it if
+you could. It is the investigation in structured form: cheaper to re-render
+than to re-derive, and the thing to correct and re-run when a finding turns
+out to be wrong.

@@ -1,8 +1,12 @@
 # The case file
 
-One JSON document. `render_report.py` validates it and refuses anything it
-cannot render faithfully — a report that renders wrong is worse than one that
-does not render, because nobody notices.
+One JSON document, passed to the `render_investigation_report` MCP tool as
+text. The tool validates it and refuses anything it cannot render faithfully —
+a report that renders wrong is worse than one that does not render, because
+nobody notices.
+
+A rejection comes back as `rendered: false` with the offending field named,
+not as an error. Fix that field and call again.
 
 Only five fields are required. Everything else is omitted from the output when
 absent, so a thin investigation produces a short report rather than a padded

@@ -1,5 +1,5 @@
 ---
-description: Vectra posture snapshot — platform health, daily threat summary, and the current priority queue.
+description: Show Vectra platform health, the daily threat summary, and the priority queue.
 argument-hint: "[hours]"
 ---
 

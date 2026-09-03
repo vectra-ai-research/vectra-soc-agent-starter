@@ -1,5 +1,5 @@
 ---
-description: End-to-end Vectra deep-dive on one host or account entity.
+description: Run an end-to-end deep-dive on one Vectra host or account entity.
 argument-hint: "<entity-name-or-id>"
 ---
 

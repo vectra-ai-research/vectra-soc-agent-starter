@@ -1,5 +1,5 @@
 ---
-description: Start-of-shift Vectra queue triage — top entities by urgency across all wired tenants.
+description: Triage the Vectra queue at shift start — top entities by urgency, all tenants.
 argument-hint: "[N] [tenant]"
 ---
 

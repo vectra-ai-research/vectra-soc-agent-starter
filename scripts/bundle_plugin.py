@@ -110,8 +110,25 @@ DEFAULT_SKILLS = [
     # by default because "investigate this entity" and "give me the report"
     # arrive in the same breath, and a tester who has the investigation
     # workflow without the report format concludes the report does not exist.
-    "investigation-report",
+    #
+    # Named with the `vectra-` prefix like every other skill here. It shipped
+    # for one day as `investigation-report` and that was a mistake: the plugin
+    # namespace is invisible in the picker, so an unprefixed name appears as a
+    # bare generic entry competing with every other plugin's skills.
+    "vectra-investigation-report",
 ]
+
+# A plugin with four or more files under `skills/*/scripts/` installs, reports
+# the correct skill count, and then stays silently disabled — with a message
+# blaming plugin sync rather than naming a rejected file. Established by
+# bisecting nine bundles on 2026-09-03: three script files load, four fail,
+# and it is not the file's name, extension, size, content or mode (all were
+# varied independently and all still failed). Total file count is not the
+# cause either: 78 files with three scripts loads, 78 with four does not.
+#
+# So the bundler refuses to build one rather than letting someone spend an
+# afternoon rediscovering it. Raise this only if the platform limit changes.
+MAX_SKILL_SCRIPTS = 3
 
 EXCLUDE = {
     "__pycache__", ".venv", "venv", ".env", ".env.local", ".DS_Store",
@@ -149,10 +166,20 @@ def copy_skill(src: Path, dst: Path) -> None:
     nothing. That failure is silent and produces a skill whose report
     definitions are all missing.
     """
+    # The vectra-investigation-report renderer stays in the repo and out of the
+    # bundle. See MAX_SKILL_SCRIPTS: a fourth file under skills/*/scripts/
+    # makes the whole plugin fail to install, silently. The skill's SKILL.md
+    # tells the agent where to find the renderer instead, and the long-term
+    # home for it is the MCP server package.
+    #
+    # Excluded at copy time rather than deleted afterwards: never creating the
+    # file cannot half-fail, and a copy-then-delete leaves the bundle wrong if
+    # the delete is refused — which is exactly what happens on a filesystem
+    # that allows writes but not unlinks.
     shutil.copytree(
         src, dst,
         symlinks=False,                       # dereference
-        ignore=shutil.ignore_patterns(*EXCLUDE),
+        ignore=shutil.ignore_patterns(*EXCLUDE, "render_report.*"),
         dirs_exist_ok=True,
     )
 
@@ -348,6 +375,11 @@ def main() -> int:
                    help="override the version in plugin/plugin.json")
     p.add_argument("--skills", nargs="+", default=DEFAULT_SKILLS,
                    help=f"skills to include (default: {' '.join(DEFAULT_SKILLS)})")
+    p.add_argument("--plugin-name",
+                   help="override the plugin name, which is also its command "
+                        "and skill namespace. Defaults to 'vectra-soc-dev' for "
+                        "--profile dev so a dev build installs alongside a "
+                        "release rather than colliding with it.")
     p.add_argument("--use-profiles", action="store_true",
                    help="omit the mcpServers env block: the tester stores "
                         "credentials with 'vectra-mcp profile add' and the "
@@ -385,6 +417,20 @@ def main() -> int:
                  "Git ref. Passing both is ambiguous.")
 
     manifest = json.loads((PLUGIN_SRC / "plugin.json").read_text())
+
+    # A plugin's `name` is its namespace: commands arrive as
+    # `/<name>:vectra-*` and skills as `<name>:vectra-investigator`. Installing
+    # a dev build under the same name as an installed release therefore does
+    # not shadow it — it collides with it, and the install fails.
+    #
+    # The dev profile defaults to a suffixed name for exactly that reason: its
+    # whole purpose is to run next to whatever is already installed. Release
+    # and beta keep the real name, since those are meant to *be* the install.
+    if args.plugin_name:
+        manifest["name"] = args.plugin_name
+    elif args.profile == "dev":
+        manifest["name"] = f"{manifest['name']}-dev"
+
     version = args.plugin_version or manifest["version"]
     if args.profile == "dev":
         # Stamp dev builds so two are distinguishable. Without this every dev
@@ -403,6 +449,17 @@ def main() -> int:
         # No server declared, so userConfig would prompt for Vectra credentials
         # that nothing consumes. The user supplies them to their own connector.
         manifest.pop("mcpServers", None)
+        manifest.pop("userConfig", None)
+    elif args.use_profiles:
+        # Same reasoning, and it was missed when --use-profiles was added.
+        # That flag removes the `env` block from .mcp.json so the credential
+        # lives in the OS keychain instead — which leaves userConfig declaring
+        # three `required: true` fields that nothing reads. The host then
+        # demands credentials before it will start the server, so the plugin
+        # installs, its skills appear, and no MCP tools ever arrive: a failure
+        # that looks nothing like its cause.
+        #
+        # The server is still declared; only the now-orphaned prompts go.
         manifest.pop("userConfig", None)
 
     # ---- stage -----------------------------------------------------------
@@ -471,9 +528,32 @@ def main() -> int:
         suffix = f"beta-{_ref_label(args.server_git_ref)}"
     else:
         suffix = version
-    archive = args.output / f"vectra-soc-{suffix}.zip"
+    # Filename follows the manifest name, so a dev build is recognisable as the
+    # dev build on disk as well as in the plugin list. The dev name already
+    # ends in "-dev", so it does not get the suffix twice.
+    archive = args.output / (
+        f"{manifest['name']}.zip" if args.profile == "dev"
+        else f"{manifest['name']}-{suffix}.zip"
+    )
     if archive.exists():
         archive.unlink()
+    # Refuse before writing the archive, not after: a bundle that installs and
+    # then sits disabled is far more expensive to diagnose than a build error.
+    script_files = sorted(
+        str(f.relative_to(staged))
+        for f in staged.rglob("skills/*/scripts/*") if f.is_file()
+    )
+    if len(script_files) > MAX_SKILL_SCRIPTS:
+        fail(
+            f"{len(script_files)} files under skills/*/scripts/ — the plugin "
+            f"loader silently refuses more than {MAX_SKILL_SCRIPTS}:\n    "
+            + "\n    ".join(script_files)
+            + "\n\n  It installs, shows the right skill count, and stays "
+              "disabled with a message blaming sync. Ship the extra script as "
+              "a companion file, or in the MCP server package, and reference "
+              "it from the skill instead of bundling it."
+        )
+
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
         for f in sorted(staged.rglob("*")):
             if f.is_file():

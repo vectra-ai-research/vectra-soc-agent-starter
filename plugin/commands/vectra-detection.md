@@ -1,5 +1,5 @@
 ---
-description: Pivot on a single Vectra detection ID and decide if it is real.
+description: Check whether a single Vectra detection is real, and decide its verdict.
 argument-hint: "<detection-id>"
 ---
 
