@@ -262,6 +262,23 @@ def scan_for_credentials(staged: Path) -> list[str]:
     return hits
 
 
+def _ref_label(ref: str) -> str:
+    """A short, human-readable label for a Git ref, for filenames and versions.
+
+    The **full** ref always goes into `.mcp.json` — an abbreviated SHA is not
+    reliably resolvable over the Git protocol, so pinning must use the whole
+    thing. But a 40-character hash in a plugin version string and a filename is
+    what a tester has to read in their plugin list and find in their downloads,
+    so the label is trimmed to the first 8 characters.
+
+    Branch and tag names are slugified and kept whole: they are already short,
+    and truncating `test/integration` to `test-int` would lose the meaning that
+    makes the label worth having.
+    """
+    slug = re.sub(r"[^0-9A-Za-z-]+", "-", ref).strip("-")
+    return slug[:8] if FULL_SHA_RE.match(ref) else slug
+
+
 def build_mcp_json(args) -> dict | None:
     if args.server_path:
         server_path = Path(args.server_path).expanduser().resolve()
@@ -380,8 +397,7 @@ def main() -> int:
         # ref moves, so two beta bundles cut a day apart are different software
         # under an identical version string. Semver prerelease identifiers
         # allow only [0-9A-Za-z-], so the ref is slugified.
-        slug = re.sub(r"[^0-9A-Za-z-]+", "-", args.server_git_ref).strip("-")
-        version = f"{version}-beta.{slug}.{datetime.now(timezone.utc):%Y%m%d%H%M}"
+        version = f"{version}-beta.{_ref_label(args.server_git_ref)}.{datetime.now(timezone.utc):%Y%m%d%H%M}"
     manifest["version"] = version
     if args.profile == "dev" and not args.server_path:
         # No server declared, so userConfig would prompt for Vectra credentials
@@ -452,7 +468,7 @@ def main() -> int:
         # Readable filename for something being handed to a person; the unique
         # timestamp lives in the manifest version, which is what an installer
         # actually compares.
-        suffix = f"beta-{re.sub(r'[^0-9A-Za-z-]+', '-', args.server_git_ref).strip('-')}"
+        suffix = f"beta-{_ref_label(args.server_git_ref)}"
     else:
         suffix = version
     archive = args.output / f"vectra-soc-{suffix}.zip"
