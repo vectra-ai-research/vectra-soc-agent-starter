@@ -1,0 +1,139 @@
+{
+  "schema": 1,
+  "_comment": "A real case, translated from the hand-written generator it replaces. Kept as the parity fixture: if the renderer changes, this must still produce a report carrying every finding the original did. Inline HTML in the original became mini-markup here: `code`, **bold**, _italic_.",
+
+  "entity": {
+    "name": "Piper-desktop",
+    "kind": "host",
+    "id": 107074,
+    "ip": "192.168.150.100",
+    "note": "10 detections"
+  },
+  "tenant": {
+    "label": "109796245472.ew1",
+    "url": "https://109796245472.ew1.portal.vectra.ai"
+  },
+  "generated": "2026-09-02T18:00Z",
+  "verdict": { "code": "TP-High" },
+
+  "answer": "A Meterpreter command channel on one desktop was used to compromise a second host, which then became a staging point for two more — and a separate Kerberoasting campaign from the same desktop is still running daily, most recently at 11:18 this morning.",
+
+  "next_action": "This is not contained. Isolate Piper-desktop first: it holds the reverse-shell listener and is the source of the ongoing Kerberoasting. Then Deacon-desktop, which became a listener itself. Treat the 17 service accounts whose Kerberos tickets were requested with weak ciphers as compromised and rotate them — that is the objective of the campaign that is still active.",
+
+  "headline": [
+    { "value": "4", "label": "hosts in the chain", "detail": "two of them found only by sweeping" },
+    { "value": "17", "label": "service accounts exposed", "detail": "weak-cipher Kerberos tickets granted" },
+    { "value": "STILL LIVE", "label": "as of 11:18 today", "detail": "daily, five days running" }
+  ],
+
+  "composition": "This host has been tagged `suspicious` and carries a ticket reference (`JIRA-5675`) — yet **not one of its ten detections is triaged, none is assigned, and no triage rule touches any of them**. Something was noticed; nothing was worked. The Kerberoasting has fired once a day since, unremarked.",
+
+  "diagram": {
+    "nodes": [
+      { "id": "c2", "label": "172.217.23.129", "sublabel": "reilly.langosh.org", "role": "external" },
+      { "id": "scanner", "label": "172.16.102.20", "sublabel": "unattributed scanner", "role": "external" },
+      { "id": "piper", "label": "Piper-desktop", "sublabel": "192.168.150.100", "role": "subject" },
+      { "id": "archer", "label": "archer.local DC", "sublabel": "10.254.100.32", "role": "victim" },
+      { "id": "deacon", "label": "Deacon-desktop", "sublabel": "host 107159", "role": "victim" },
+      { "id": "dc2", "label": "dc2-aws-us-west-01", "sublabel": "called back 17:40", "role": "victim" },
+      { "id": "eudb", "label": "eu-db5-aws.demo.corp", "sublabel": "called back 17:42", "role": "victim" }
+    ],
+    "edges": [
+      { "from": "c2", "to": "piper", "label": "Meterpreter / TLS" },
+      { "from": "piper", "to": "deacon", "label": "SMB stage 16:01" },
+      { "from": "deacon", "to": "piper", "label": "4444 shell 16:05", "back": true },
+      { "from": "piper", "to": "archer", "label": "Kerberoasting" },
+      { "from": "deacon", "to": "dc2" },
+      { "from": "deacon", "to": "eudb" },
+      { "from": "scanner", "to": "piper", "label": "4444 probe", "kind": "dashed" },
+      { "from": "scanner", "to": "dc2", "label": "1,255 probes", "kind": "dashed" }
+    ]
+  },
+
+  "timeline": [
+    { "time": "28 Aug 14:55", "title": "Meterpreter session over TLS", "lane": "C2", "provenance": "19765", "grade": "decisive",
+      "detail": "Threat 90 / certainty 90 — the highest-scored detection here. To 172.217.23.129:443 with a self-signed certificate issued by `reilly.langosh.org`. 4.8 MB sent, 5.1 MB received." },
+    { "time": "28 Aug 14:56", "title": "Hidden HTTPS tunnel, same destination", "lane": "C2", "provenance": "19769", "grade": "decisive",
+      "detail": "Tunnel type recorded as _long TCP session — command line_. 9.8 MB sent, 11.3 MB received. Interactive, not beaconing." },
+    { "time": "28 Aug 15:57", "title": "Directory query against one AD forest", "lane": "Recon", "provenance": "19787", "grade": "supporting",
+      "detail": "LDAP to pdc01-diamond-city, base `DC=lab,DC=tme,DC=local`, enumerating computer objects." },
+    { "time": "28 Aug 15:57", "title": "Targeted RPC reconnaissance", "lane": "Recon", "provenance": "19793", "grade": "supporting",
+      "detail": "`LsarLookupNames4` x20 and `LsarLookupSids3` x10 against Windows-Server-2016-Demo; session and workstation-user enumeration against Deacon-desktop." },
+    { "time": "28 Aug 15:59", "title": "Broad RPC sweep", "lane": "Recon", "provenance": "19788", "grade": "supporting",
+      "detail": "Port 445 across six named hosts and roughly fifteen unnamed addresses in five subnets. Looking for somewhere to land." },
+    { "time": "28 Aug 16:01", "title": "Remote service started on Deacon-desktop", "lane": "Lateral movement", "provenance": "19789", "grade": "decisive",
+      "detail": "`svcctl` named pipe, `StartServiceW`, account `piper`." },
+    { "time": "28 Aug 16:01", "title": "First access to an admin share", "lane": "Info", "provenance": "19790", "grade": "decisive",
+      "detail": "`\\\\192.168.199.30\\ADMIN$`. Scored 0 / 0 and categorised _info_ — **this is the detection the compact listing tool does not return**, so an agent enumerating detections through `list_detections_with_basic_info` never sees it." },
+    { "time": "28 Aug 16:05", "title": "Reverse shell back from Deacon-desktop", "lane": "Lateral movement", "provenance": "19794", "grade": "decisive",
+      "detail": "Session data shows the 4444 connection running **Deacon to Piper**: 8,359 bytes sent, 416,370 received. Piper is the listener. The staging went out over SMB; the shell came back." },
+    { "time": "29 Aug 11:19", "title": "Service-principal enumeration begins", "lane": "Recon", "provenance": "19866", "grade": "decisive",
+      "detail": "Threat 80 / 70. LDAP to 10.254.100.32, base `dc=archer,dc=local`, filter matching enabled non-computer accounts that hold a service principal name — the standard Kerberoasting target query. **Repeats once a day, five days, through 11:18 today.**" },
+    { "time": "29 Aug 11:19", "title": "Weak-cipher Kerberos tickets requested", "lane": "Recon", "provenance": "19867", "grade": "decisive",
+      "detail": "17 service principals, requesting `rc4_hmac`, `des3_cbc_sha1_kd` and `des_cbc_md5`. The domain controller answered with `rc4_hmac` — offline-crackable." }
+  ],
+
+  "established": [
+    { "claim": "Deacon-desktop is compromised, not merely targeted.",
+      "evidence": "It carries urgency 100, severity critical, attack rating 10 and eight detections of its own (host 107159), with its last at 17:43:29 — after the reverse shell at 16:05. The lateral movement succeeded." },
+    { "claim": "The Kerberoasting is automated and it is not finished.",
+      "evidence": "Detection 19866 fires in five discrete daily groups: 11:19:07 on 29 August through 11:18:56 on 2 September. Eleven seconds of drift across four days is a schedule, not a person." },
+    { "claim": "Seventeen service accounts have crackable tickets.",
+      "evidence": "Detection 19867 lists them, spanning SQL, mail, VPN, VNC, Oracle, Hadoop, Solr and SAP service principals, all privilege 3 (medium). The controller returned `rc4_hmac` — offline-crackable at leisure, with no further contact with your network." }
+  ],
+
+  "sweep": [
+    { "claim": "The chain runs four hosts deep, and two were never in the detections.",
+      "evidence": "A sweep for internal port 4444 returned six rows. After Deacon-desktop called back to Piper at 16:05, **Deacon itself became a listener**: `dc2-aws-us-west-01` connected to it at 17:40 and `eu-db5-aws.demo.corp` at 17:42, each pulling about 1 MB. Neither host appears anywhere in Piper-desktop's ten detections. Deacon's own last detection at 17:43:29 sits immediately after both." },
+    { "claim": "Something is hunting for the same listeners.",
+      "evidence": "`172.16.102.20` made **1,255** connections to port 4444 on dc2-aws-us-west-01 between 19:10 and 19:50, transferring zero bytes in either direction — a scan, not a session. The same address touched Piper's 4444 port at 16:04:57, twenty-five seconds before Deacon called back. Unexplained, and worth a look." },
+    { "claim": "Three accounts, three directories, one desktop.",
+      "evidence": "The host's access history carries `piper@corp.example.com` (the probable owner), `popo@lab.tme.local` (last seen at 15:57 on 28 August, matching the first recon burst) and `fguillot181@archer.local` (last seen 11:18 today, matching the live Kerberoasting). The two attack phases used different credentials against different forests." }
+  ],
+
+  "ruled_out": [
+    { "claim": "The two command channels are not proven to be the same operation.",
+      "evidence": "Piper's C2 server (172.217.23.129) and jump-station5's (40.121.154.127) present the _same_ TLS server fingerprint, JA3S `ec74a5c5...`. That is suggestive of a shared server build — and it is also what any two servers running the same TLS library would look like. On its own it links tooling, not operators. Treating it as one campaign needs more than a fingerprint." },
+    { "claim": "The stage-loader byte counts are not real.",
+      "evidence": "Deacon to Piper transferred exactly 8,359 / 416,370 bytes; the two later callbacks to Deacon transferred exactly 39,790 / 1,035,044 bytes _each_. Identical volumes across independent sessions do not occur naturally. This is a replayed dataset. The chain and its direction are real; the precise equality is an artifact." }
+  ],
+
+  "gaps": [
+    { "outcome": "CLOSED", "question": "Is Deacon-desktop compromised, or only targeted?",
+      "detail": "One entity lookup. Urgency 100, critical, eight detections, last one 1h42m after the reverse shell. **Compromised.** This is the gap that decides whether containment is one host or several, and it cost a single call." },
+    { "outcome": "CLOSED", "question": "Did the stage loader spread beyond Deacon-desktop?",
+      "detail": "One Investigation Query on port 4444. It did — to `dc2-aws-us-west-01` and `eu-db5-aws.demo.corp`. It also corrected the direction: the 4444 connection runs Deacon to Piper, so Piper holds the listener. That changes which host to isolate first." },
+    { "outcome": "NO DATA", "question": "Endpoint process context for the lateral movement",
+      "detail": "Nine of the ten detections return `processes: []`. Only 19788 carries CrowdStrike context, and its five processes (`SenseCM.exe`, `backgroundTaskHost.exe`, `taskhostw.exe`) are routine Windows and Defender activity, not the attack. A real negative: the EDR did not capture the relevant processes, or did not forward them." },
+    { "outcome": "OUT OF REACH", "question": "How Piper-desktop was compromised in the first place.",
+      "detail": "The earliest visible activity is already an established Meterpreter channel at 14:55. Nothing before it." },
+    { "outcome": "OUT OF REACH", "question": "Whether any of the 17 tickets has actually been cracked.",
+      "detail": "That happens offline on the attacker's hardware and produces no telemetry anywhere. Absence of evidence here is expected and means nothing — which is precisely why the accounts should be rotated rather than watched." },
+    { "outcome": "OUT OF REACH", "question": "What the two hosts that called back to Deacon did next.",
+      "detail": "They are outside this investigation's scope. Both need their own deep-dive; dc2-aws-us-west-01 in particular is a domain controller by name." },
+    { "outcome": "OUT OF REACH", "question": "Who or what 172.16.102.20 is.",
+      "detail": "No hostname resolves for it. It scanned for 4444 listeners during the incident window. Could be defensive tooling; could be the operator checking their own estate." }
+  ],
+
+  "next_steps": [
+    { "title": "Deep-dive dc2-aws-us-west-01 and eu-db5-aws.demo.corp",
+      "why": "Both called back to a compromised listener. Whether the chain continues past them is the difference between a four-host incident and something larger." },
+    { "title": "Establish what 172.16.102.20 is",
+      "why": "1,255 connections to a 4444 listener is either your own scanner or theirs, and those have opposite implications." },
+    { "title": "Confirm whether JIRA-5675 is being worked",
+      "why": "Vectra shows no assignment and no triage on any detection. If the ticket is closed, the Kerberoasting that fired this morning was closed with it." }
+  ],
+
+  "evidence": [
+    { "id": "19765", "what": "Meterpreter over TLS to 172.217.23.129, threat 90 / certainty 90", "source": "get_detection_details", "grade": "decisive" },
+    { "id": "19769", "what": "Hidden HTTPS tunnel, same destination, interactive session", "source": "get_detection_details", "grade": "decisive" },
+    { "id": "19789", "what": "Remote service started on Deacon-desktop as account `piper`", "source": "get_detection_details", "grade": "decisive" },
+    { "id": "19790", "what": "First ADMIN$ access; category info, scored 0/0, absent from the compact listing", "source": "list_entity_detections", "grade": "decisive" },
+    { "id": "19794", "what": "4444 session direction Deacon to Piper — Piper is the listener", "source": "get_detection_details", "grade": "decisive" },
+    { "id": "19866", "what": "Service-principal enumeration, five daily groups through 11:18 today", "source": "get_detection_details", "grade": "decisive" },
+    { "id": "19867", "what": "17 service principals issued rc4_hmac tickets", "source": "get_detection_details", "grade": "decisive" },
+    { "id": "port 4444 sweep", "what": "Six rows; two hosts calling back to Deacon at 17:40 and 17:42", "source": "run_investigation", "grade": "decisive" },
+    { "id": "host 107159", "what": "Deacon-desktop urgency 100, eight detections, last at 17:43:29", "source": "get_host_details", "grade": "decisive" },
+    { "id": "access history", "what": "Three accounts across three forests on one desktop", "source": "get_host_details", "grade": "supporting" }
+  ]
+}

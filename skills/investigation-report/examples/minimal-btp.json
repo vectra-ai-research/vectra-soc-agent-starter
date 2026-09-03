@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "_comment": "ILLUSTRATIVE, NOT REAL. Every value here is invented, unlike piper-desktop.json which is a real case. This example exists because six consecutive investigations in this format all returned TP-High, so the format had never been made to say 'this is fine' — which is the more common real-world outcome by a wide margin. It also shows the shape of a short report: a thin investigation should produce a short document, not a padded one.",
+
+  "entity": {
+    "name": "build-agent-07",
+    "kind": "host",
+    "id": 104112,
+    "ip": "10.20.44.19",
+    "note": "2 detections"
+  },
+  "tenant": {
+    "label": "example-tenant.ew1",
+    "url": "https://example-tenant.ew1.portal.vectra.ai"
+  },
+  "generated": "2026-09-03T09:20Z",
+  "verdict": { "code": "BTP" },
+
+  "answer": "The RPC reconnaissance from this host is its CI agent enumerating its own build fleet on a five-minute schedule, and the pattern is identical on the four other agents in the same group.",
+
+  "next_action": "No containment. Recommend a triage rule scoped to the `ci-build-agents` group for detection type `Suspicious Remote Execution`, so the next 288 daily occurrences do not reach the queue. Do **not** scope the rule by detection type alone — the same type from outside this group is exactly what you want to keep seeing.",
+
+  "headline": [
+    { "value": "5 / 5", "label": "hosts show the identical pattern", "detail": "all in the ci-build-agents group" },
+    { "value": "288", "label": "occurrences per day", "detail": "every 5 minutes, 11s drift — a schedule" },
+    { "value": "0", "label": "bytes leaving the estate", "detail": "confirmed with a control query" }
+  ],
+
+  "composition": "Both detections score `threat 25 / certainty 30` and the entity sits at urgency 41 — low enough that this would ordinarily be left in the queue rather than resolved. That is the argument for closing it properly: an unexplained low-urgency entity firing 288 times a day is what trains an analyst to ignore the queue.",
+
+  "diagram": {
+    "nodes": [
+      { "id": "agent", "label": "build-agent-07", "sublabel": "10.20.44.19", "role": "subject" },
+      { "id": "peers", "label": "4 peer build agents", "sublabel": "ci-build-agents group", "role": "infra" },
+      { "id": "orch", "label": "ci-orchestrator-01", "sublabel": "10.20.44.2", "role": "infra" }
+    ],
+    "edges": [
+      { "from": "orch", "to": "agent", "label": "schedules" },
+      { "from": "agent", "to": "peers", "label": "RPC enumeration" }
+    ]
+  },
+
+  "timeline": [
+    { "time": "every 5 min", "title": "Targeted RPC reconnaissance", "lane": "Recon", "provenance": "20411", "grade": "supporting",
+      "detail": "`LsarLookupNames4` against the four peer agents. First seen 2026-06-02, still firing. `first_timestamp` to `last_timestamp` spans 93 days." },
+    { "time": "every 5 min", "title": "Suspicious remote execution", "lane": "Lateral movement", "provenance": "20412", "grade": "supporting",
+      "detail": "`svcctl` service query — not `StartServiceW`. Reads state, starts nothing. Account `svc_ci_agent`, privilege 2." }
+  ],
+
+  "established": [
+    { "claim": "The behaviour predates any incident window and never changes.",
+      "evidence": "Detection 20411 has fired continuously since 2026-06-02 with 11 seconds of drift across 93 days. A schedule, not a person — and nothing about it has escalated in three months." },
+    { "claim": "All five agents in the group behave identically.",
+      "evidence": "The same detection type, the same target set, the same interval on `build-agent-05` through `build-agent-09`. A compromise that reproduced itself this precisely across five hosts and then did nothing else for 93 days is not a plausible reading." },
+    { "claim": "The account is purpose-scoped and has not been used elsewhere.",
+      "evidence": "`svc_ci_agent` appears in access history on the five agents and the orchestrator only. No interactive logon, no cloud surface, privilege 2 throughout." }
+  ],
+
+  "sweep": [
+    { "claim": "Nothing left the estate, and that is a proven negative rather than an absence of evidence.",
+      "evidence": "An Investigation Query for outbound sessions from 10.20.44.19 over 14 days returned only the internal 10.20.44.0/24 range and the OS update endpoints. **Control query**: the same table without the host predicate returned 4.1 million rows for the window, so the feed is populated and the empty result means what it says." }
+  ],
+
+  "gaps": [
+    { "outcome": "CLOSED", "question": "Is this really the CI agent, or something wearing its account?",
+      "detail": "The orchestrator's own scheduled task list, retrieved by the asset owner, matches the interval and target set exactly. Confirmed by a human who owns the system, not inferred from timing." },
+    { "outcome": "CLOSED", "question": "Do the peer agents show the same pattern, or is this host the odd one out?",
+      "detail": "One entity listing filtered to the group. All five identical. Had this host been the only one, the verdict would have gone the other way." }
+  ],
+
+  "next_steps": [
+    { "title": "Write the triage rule scoped to the group, then re-check in 30 days",
+      "why": "A rule scoped too broadly hides the same behaviour arriving from somewhere that matters. Re-checking is how you find out it was scoped too broadly." }
+  ],
+
+  "evidence": [
+    { "id": "20411", "what": "RPC enumeration, 93-day continuous history, 11s drift", "source": "get_detection_details", "grade": "decisive" },
+    { "id": "20412", "what": "svcctl service query only — no service creation or start", "source": "get_detection_details", "grade": "decisive" },
+    { "id": "group ci-build-agents", "what": "Five hosts, identical pattern", "source": "list_entities", "grade": "decisive" },
+    { "id": "outbound sweep + control", "what": "No egress; control query proves the table is populated", "source": "run_investigation", "grade": "decisive" },
+    { "id": "asset owner", "what": "Orchestrator scheduled task matches interval and targets", "source": "out-of-band confirmation", "grade": "decisive" }
+  ]
+}

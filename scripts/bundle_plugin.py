@@ -106,6 +106,11 @@ DEFAULT_SKILLS = [
     "vectra-reports-mcp",
     "vectra-pcap",
     "virustotal",
+    # Formats a finished investigation as one self-contained HTML file. Ships
+    # by default because "investigate this entity" and "give me the report"
+    # arrive in the same breath, and a tester who has the investigation
+    # workflow without the report format concludes the report does not exist.
+    "investigation-report",
 ]
 
 EXCLUDE = {
@@ -275,17 +280,29 @@ def build_mcp_json(args) -> dict | None:
         }
 
     if args.server_git_ref:
-        return {
-            "mcpServers": {
-                "vectra-ai-mcp": {
-                    "type": "stdio",
-                    "command": "uvx",
-                    "args": ["--from", f"git+{SERVER_REPO}@{args.server_git_ref}",
-                             "vectra-ai-mcp-server"],
-                    "env": dict(CRED_ENV),
-                }
-            }
+        server = {
+            "type": "stdio",
+            "command": "uvx",
+            "args": ["--from", f"git+{SERVER_REPO}@{args.server_git_ref}",
+                     "vectra-ai-mcp-server"],
         }
+        # --use-profiles omits the env block entirely. Three reasons, and the
+        # third is the one that actually forces it:
+        #
+        #  1. The tester's API secret stays in their OS keychain instead of
+        #     being typed into a plugin configuration prompt and stored in the
+        #     host's config file.
+        #  2. Switching tenants becomes `vectra-mcp profile use <name>` rather
+        #     than editing that config.
+        #  3. `${user_config.*}` inside an `env` block can silently fail to
+        #     spawn the server (anthropics/claude-code#51573) — the bug the dev
+        #     profile exists to sidestep. No env block, no exposure to it.
+        #
+        # Requires a server ref that supports profiles; on an older ref the
+        # server will start and then report that no tenant is configured.
+        if not args.use_profiles:
+            server["env"] = dict(CRED_ENV)
+        return {"mcpServers": {"vectra-ai-mcp": server}}
 
     if args.profile == "dev":
         return None
@@ -314,6 +331,11 @@ def main() -> int:
                    help="override the version in plugin/plugin.json")
     p.add_argument("--skills", nargs="+", default=DEFAULT_SKILLS,
                    help=f"skills to include (default: {' '.join(DEFAULT_SKILLS)})")
+    p.add_argument("--use-profiles", action="store_true",
+                   help="omit the mcpServers env block: the tester stores "
+                        "credentials with 'vectra-mcp profile add' and the "
+                        "server resolves its active profile. Requires a "
+                        "--server-git-ref that supports profiles.")
     p.add_argument("--output", type=Path, default=DIST_DIR)
     p.add_argument("--allow-dangling", action="store_true",
                    help="downgrade dangling cross-skill links to a warning")
@@ -468,9 +490,21 @@ def main() -> int:
         print("\n  dev bundle -- do not publish. Install it, then point your own")
         print("  vectra-ai-mcp connector at the checkout you want to test.")
 
-    if args.profile == "beta":
+    if args.profile == "beta" and args.use_profiles:
+        print("\n  beta bundle, profile-based -- no credentials in this file and")
+        print("  none prompted for on install. Send the tester these three steps:")
+        print("    1. install this .zip as a plugin")
+        print(f"    2. uvx --from git+{SERVER_REPO}@{args.server_git_ref} \\")
+        print("           vectra-mcp profile add <name>")
+        print("    3. restart the host, then ask it to investigate an entity")
+        print("  Their secret goes to their OS keychain. Switching tenants is")
+        print("  'vectra-mcp profile use <name>' plus a host restart.")
+    elif args.profile == "beta":
         print("\n  beta bundle -- self-contained. The tester installs this one file")
         print("  and is prompted for their own tenant URL, client ID and secret.")
+        print("  NOTE: --use-profiles keeps the secret out of the host config and")
+        print("  avoids the ${user_config.*} spawn bug; prefer it on a ref that")
+        print("  supports profiles.")
         if not FULL_SHA_RE.match(args.server_git_ref):
             print(f"\n  NOTE: '{args.server_git_ref}' is a moving ref, not a full commit SHA.")
             print("  uv caches a resolved Git revision, so a tester who installed")
