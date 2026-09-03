@@ -56,7 +56,108 @@
 
 ---
 
+## Resolve the identity set before forming a verdict
+
+**This is a step, not a pivot.** Every investigation resolves which credentials
+are involved, on what surfaces, at what privilege — before the verdict, and
+whether or not the entity is an account.
+
+The reason is that the platform models hosts and accounts, while an attack is
+usually **one credential moving across surfaces**. A report titled after a host
+describes the room the attack passed through. Measured across six
+investigations, identity was the decisive dimension in four, and in three of
+those it changed the recommended action.
+
+### Read these fields. Naming them is the point.
+
+An instruction to "check the account" produces a `get_account_details` call
+with default parameters, which returns the account and teaches you nothing.
+
+| Field | Why | Trap |
+|---|---|---|
+| `include_access_history=True` | Which credentials touched this host, and when | **Defaults to `False`.** The single most useful identity field is off unless you ask |
+| `account_type` | The surface list — `kerberos`, `o365`, `entra_principal`, `aws` | A list. Its *length* is often the finding |
+| `privilege_level` / `privilege_category` | On the account **and** on what it reached | Present on shares and resources too — see the delta rule below |
+| `associated_accounts` | The platform's own identity-linking field | Referenced nowhere until now; check it before concluding two accounts are unrelated |
+| `probable_home` | Whether the account is operating where it lives | A cheap anomaly signal that needs no detection to fire |
+
+For a **host**: which credentials authenticated to it, in the window, at what
+privilege, across which surfaces and forests.
+
+For an **account**: which hosts it reached, which surfaces it holds, which
+tenants or forests it spans.
+
+An empty answer is a finding, not a blank. On `Deacon-desktop`,
+`account_access_history` came back empty — visible only because it was asked
+for, and worth stating in the report.
+
+### One credential on several surfaces is the headline, not a detail
+
+`adam_admin@fictotech.com` (account 3575) was recorded as `kerberos`, `o365`,
+`entra_principal` **and** `aws` simultaneously. One credential, four control
+planes, ending in a Key Vault credential dump. That is not a host incident
+that touched some cloud, and describing it as one misses what happened.
+
+Conversely, `Piper-desktop` carried **three** accounts across **three**
+forests, and the two attack phases used different credentials. Same host, two
+identity stories.
+
+### The privilege delta
+
+A low-privilege account reaching a high-privilege resource is a finding in its
+own right, and both numbers are already in the response. On `jump-station5` a
+**privilege-2** account accessed a **privilege-10** share — detections 19833
+and 19834, the decisive evidence in the case.
+
+Look for it explicitly. It does not depend on a detection firing, and nothing
+else in the workflow surfaces it.
+
+### A host detection and an account detection in the same second are one event
+
+Detections 19833 and 19834 are the *same* privilege anomaly, recorded against
+the host and against the account at 19:47:49. Reported as two rows they look
+like two pieces of corroborating evidence. They are one observation seen from
+both sides — which is stronger, and only if you say so.
+
+When a host/account detection pair shares a timestamp and a description, merge
+them and state that both sides recorded it.
+
+### Ask what survives a credential reset
+
+The most common wrong recommendation in this format's history is "reset the
+password". Before recommending any containment, enumerate persistence that a
+credential reset would **not** remove:
+
+- OAuth application grants and app registrations (`19839` on jump-station5)
+- Access keys minted for a *different* principal (`19847` — resetting the
+  compromised account does not touch it)
+- Mailbox and transport rules
+- Service principals whose tickets have been requested with weak ciphers —
+  cracking happens offline and produces no telemetry, so rotate rather than
+  watch
+- Anything running on a host: a listener is a process, and no identity action
+  reaches it
+
+Each one changes the recommended action. Record them, with what they survive,
+in the `persistence` block of the investigation report.
+
+### Impossible timing means the credential was already held
+
+On `hp-pro-mfp3301`, DCSync ran as `rogersvc` **29 seconds** after that
+principal's ticket was requested. Cracking an `rc4_hmac` ticket offline does
+not take 29 seconds. Either the credential was already known and the
+Kerberoasting is theatre, or the timing is compressed by a replayed dataset.
+
+Check the arithmetic whenever a credential is used shortly after being
+obtained. In a real environment that gap is the most important thing on the
+page.
+
+---
+
 ## Hybrid attacks — never stop at one entity type
+
+> Superseded in part by the identity-set step above, which is mandatory rather
+> than conditional. What follows is the mechanics of the pivot.
 
 If the entity is a **host**, also check the account(s) most active on
 that host (resolve account IDs via `lookup_entity_info_by_name`, or
