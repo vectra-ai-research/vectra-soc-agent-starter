@@ -52,38 +52,81 @@ SCHEMA = 1
 
 #: How much weight an item carries. The grade is displayed, because grading is
 #: what gives a reader permission not to read everything.
+# ---------------------------------------------------------------------------
+# Palette — Vectra brand v3.0, light only
+#
+# The report is light-only and deliberately not theme-aware. Two analysts
+# discussing the same report should be looking at the same thing, and it gets
+# attached to tickets and printed, which a dark theme does badly.
+#
+# These are the v3.0 guide values:
+#   navy #00294A · green-on-light #1D895E · Vectra Grey #303435
+#   light gray #BABBBC · blue #1F91D7 · orange #E99912 · rust #C95321
+#   red #A22911 · white #FFFFFF
+# The accents are designated "data viz / warnings only", which is exactly what
+# the verdict, grade and outcome tags are.
+#
+# Two derivations, called out rather than smuggled in, per the brand skill's
+# own instruction not to silently override brand values:
+#   DIM  #6E7477 — a darkened Vectra Grey. #BABBBC is the guide's muted-text
+#                  colour but reaches only ~1.9:1 on white, so it is used for
+#                  RULES and the derived grey for muted TEXT.
+#   BLUE #1668A0 — a darkened #1F91D7. White text on #1F91D7 is ~3.0:1, which
+#                  is not enough for a 12px bold badge.
+# ---------------------------------------------------------------------------
+NAVY = "#00294A"
+GREEN = "#1D895E"
+GREY = "#303435"
+DIM = "#6E7477"
+RULE = "#BABBBC"
+BLUE = "#1668A0"
+RUST = "#C95321"
+RED = "#A22911"
+
 GRADES = {
-    "decisive": ("Decision-defining", "#b3261e"),
-    "supporting": ("Supporting", "#8a5a00"),
-    "context": ("Context", "#5f6368"),
-    "ambiguous": ("Ambiguous", "#6b4fa0"),
+    "decisive": ("Decision-defining", RED),
+    "supporting": ("Supporting", RUST),
+    "context": ("Context", DIM),
+    "ambiguous": ("Ambiguous", BLUE),
 }
 
 #: Gap outcomes, from the gap-closing rule in workflow-entity-deep-dive.md.
 OUTCOMES = {
-    "CLOSED": "#1e6e3c",
-    "NO DATA": "#8a5a00",
-    "BLOCKED": "#b3261e",
-    "OUT OF REACH": "#5f6368",
+    "CLOSED": GREEN,
+    "NO DATA": RUST,
+    "BLOCKED": RED,
+    "OUT OF REACH": DIM,
 }
 
 VERDICTS = {
-    "TP-High": "#b3261e",
-    "TP-Low": "#8a5a00",
-    "BTP": "#1e6e3c",
-    "Need-more-data": "#5f6368",
-    "NMD": "#5f6368",
+    "TP-High": RED,
+    "TP-Low": RUST,
+    "BTP": GREEN,
+    "Need-more-data": NAVY,
+    "NMD": NAVY,
+}
+
+#: What an identity was doing in this case. Not a privilege level and not a
+#: verdict — the question is whether the credential was the attacker's tool,
+#: the attacker's target, or a bystander whose name appears in the evidence.
+IDENTITY_ROLES = {
+    "compromised": ("Compromised", RED),
+    "used": ("Used by the attacker", RUST),
+    "targeted": ("Targeted", BLUE),
+    "owner": ("Legitimate owner", DIM),
 }
 
 #: Node roles -> (fill, stroke). Roles rather than colours in the case file, so
-#: a case cannot specify something unreadable in dark mode.
+#: a case cannot specify something illegible. Fills are light tints of the
+#: brand accent used for the stroke — there is no purple in the v3.0 palette,
+#: so "external" takes navy rather than the invented violet it had before.
 ROLES = {
-    "subject": ("#fde7e9", "#b3261e"),
-    "attacker": ("#fff4e5", "#8a5a00"),
-    "victim": ("#e8f0fe", "#1a56b0"),
-    "external": ("#f3e8fd", "#6b4fa0"),
-    "identity": ("#e6f4ea", "#1e6e3c"),
-    "infra": ("#f1f3f4", "#5f6368"),
+    "subject": ("#FBEAE7", RED),
+    "attacker": ("#FAEEE7", RUST),
+    "victim": ("#E8EFF5", BLUE),
+    "external": ("#E7EBEF", NAVY),
+    "identity": ("#E7F2EC", GREEN),
+    "infra": ("#F1F2F2", DIM),
 }
 DEFAULT_ROLE = "infra"
 
@@ -175,6 +218,42 @@ def validate(case: dict) -> list:
             raise CaseError(
                 f"gaps[{i}].outcome is {outcome!r}; use one of {', '.join(OUTCOMES)}"
             )
+
+    for i, item in enumerate(case.get("identities") or []):
+        _need(item, "name", f"identities[{i}]")
+        role = item.get("role")
+        if role is not None and role not in IDENTITY_ROLES:
+            raise CaseError(
+                f"identities[{i}].role is {role!r}; use one of "
+                f"{', '.join(IDENTITY_ROLES)}"
+            )
+        if item.get("surfaces") is not None and not isinstance(item["surfaces"], list):
+            raise CaseError(
+                f"identities[{i}].surfaces must be a list — it is the point of "
+                f"the field that one credential can hold several"
+            )
+
+    for i, item in enumerate(case.get("persistence") or []):
+        _need(item, "mechanism", f"persistence[{i}]")
+        if item.get("survives") is not None and not isinstance(item["survives"], list):
+            raise CaseError(f"persistence[{i}].survives must be a list")
+        if not item.get("survives"):
+            # Warn rather than refuse: a mechanism that survives nothing is
+            # still worth listing. But `survives` is what makes this section
+            # change the operator's action, so its absence is worth flagging.
+            warnings.append(
+                f"persistence[{i}] ({item['mechanism']}) does not say what it "
+                f"survives — that field is what makes the section actionable"
+            )
+
+    # An account entity with no identities block is almost certainly an
+    # oversight: the subject of the report is a credential.
+    if (case.get("entity", {}).get("kind") == "account"
+            and not case.get("identities")):
+        warnings.append(
+            "the subject is an account but there is no identities block — "
+            "record its surfaces, privilege and home at minimum"
+        )
 
     diagram = case.get("diagram") or {}
     nodes = diagram.get("nodes") or []
@@ -279,24 +358,86 @@ def _layer(nodes: list, edges: list) -> dict:
     return column
 
 
+def _hits(a: dict, b: dict) -> bool:
+    return (a["x"] < b["x"] + b["w"] and b["x"] < a["x"] + a["w"]
+            and a["y"] < b["y"] + b["h"] and b["y"] < a["y"] + a["h"])
+
+
 def _check_overlaps(boxes: list) -> list:
     """Every pair of node rectangles must be disjoint. Eyeballing is not a check."""
     problems = []
     for i in range(len(boxes)):
         for j in range(i + 1, len(boxes)):
-            a, b = boxes[i], boxes[j]
-            if (a["x"] < b["x"] + b["w"] and b["x"] < a["x"] + a["w"]
-                    and a["y"] < b["y"] + b["h"] and b["y"] < a["y"] + a["h"]):
-                problems.append(f"{a['id']!r} overlaps {b['id']!r}")
+            if _hits(boxes[i], boxes[j]):
+                problems.append(f"{boxes[i]['id']!r} overlaps {boxes[j]['id']!r}")
     return problems
 
 
+#: Approximate width of one character of the 11px edge-label font. Measuring
+#: text properly needs a font engine; this errs high so the collision test is
+#: conservative rather than optimistic.
+LABEL_CHAR_W = 6.0
+LABEL_H = 13
+
+
+def _place_labels(labels: list, boxes: list, height: float) -> list:
+    """Nudge edge labels until they stop colliding. Returns unresolved cases.
+
+    This exists because `_check_overlaps` only ever compared *node* boxes, so
+    edge labels were completely unchecked — and two of them duly rendered on
+    top of each other as unreadable overlapping glyphs. A geometry check that
+    covers some of the geometry provides confidence without protection, which
+    is worse than no check at all.
+
+    Resolution rather than refusal, and the return value is a list of
+    *warnings* rather than errors. Two node boxes on top of each other is a
+    broken layout and worth refusing to render; a label the layout could not
+    find room for is cosmetic, and throwing away a completed investigation
+    over it would be the wrong trade. The label is still drawn — with a white
+    halo behind the glyphs so it stays legible — and the author is told to
+    shorten it.
+    """
+    placed = []
+    unplaced = []
+
+    for lab in labels:
+        w = max(len(str(lab["text"])) * LABEL_CHAR_W, 12)
+        rect = {"id": lab["text"], "w": w, "h": LABEL_H,
+                "x": lab["x"] - w / 2, "y": lab["y"] - LABEL_H + 3}
+
+        # Offsets: stay put, then up/down in increasing steps. Vertical only —
+        # a horizontal shift slides a label away from the edge it belongs to.
+        for dy in (0, -15, 15, -30, 30, -45, 45, -60, 60):
+            trial = dict(rect, y=rect["y"] + dy)
+            if trial["y"] < 2 or trial["y"] + trial["h"] > height - 2:
+                continue
+            if any(_hits(trial, other) for other in placed + boxes):
+                continue
+            rect = trial
+            lab["y"] = rect["y"] + LABEL_H - 3
+            break
+        else:
+            unplaced.append(
+                f"edge label {lab['text']!r} could not be placed clear of the "
+                f"diagram — shorten it, or drop it and put the detail in the "
+                f"timeline"
+            )
+        placed.append(rect)
+
+    return unplaced
+
+
 def build_diagram(diagram: dict) -> tuple:
-    """Return (svg, problems). Empty svg when there is nothing to draw."""
+    """Return (svg, problems, warnings). Empty svg when there is nothing to draw.
+
+    Problems refuse the render — overlapping node boxes mean the layout is
+    broken. Warnings do not: an edge label that could not be placed clear of
+    everything is cosmetic, and is still drawn.
+    """
     nodes = diagram.get("nodes") or []
     edges = diagram.get("edges") or []
     if not nodes:
-        return "", []
+        return "", [], []
 
     column = _layer(nodes, edges)
     by_column = {}
@@ -327,44 +468,71 @@ def build_diagram(diagram: dict) -> tuple:
     width = max(b["x"] + b["w"] for b in boxes.values()) + MARGIN
     height = max(b["y"] + b["h"] for b in boxes.values()) + MARGIN
 
+    # Back edges are routed underneath everything, so they need room that the
+    # node boxes do not account for — including room for their own label.
+    has_back = any(e.get("back") for e in edges)
+    back_y = height + 12 if has_back else None
+    if has_back:
+        height += 34
+
     parts = [
-        f'<svg viewBox="0 0 {width} {height}" width="100%" '
-        f'style="max-width:{width}px" role="img" '
+        # min-width, not max-width. A layered graph is often much wider than
+        # tall — Piper's came out 1072x160 — and scaling that into a 900px
+        # column shrank 12px labels to about 9px, so the diagram read as a
+        # faint strip and the first reader scrolled straight past it. The
+        # figure container already scrolls horizontally; this makes it do so
+        # rather than shrink the text below the size it was laid out for.
+        f'<svg viewBox="0 0 {width} {height}" '
+        f'style="width:100%;min-width:{width}px" role="img" '
         f'aria-label="Relationship diagram for this investigation" '
         f'xmlns="http://www.w3.org/2000/svg">',
         '<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" '
         'markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
-        '<path d="M 0 0 L 10 5 L 0 10 z" fill="#5f6368"/></marker></defs>',
+        f'<path d="M 0 0 L 10 5 L 0 10 z" fill="{DIM}"/></marker></defs>',
     ]
+
+    # Edges first, then labels. Labels are positioned in a second pass so they
+    # can be moved out of each other's way once every one of them is known.
+    pending_labels = []
 
     for edge in edges:
         a, b = boxes[edge["from"]], boxes[edge["to"]]
         dashed = ' stroke-dasharray="5 4"' if edge.get("kind") == "dashed" else ""
         if edge.get("back"):
             # Route return edges below everything, so a loop never crosses a box.
-            y = height - 6
             x1, x2 = a["x"] + a["w"] / 2, b["x"] + b["w"] / 2
             parts.append(
-                f'<path d="M {x1:.0f} {a["y"] + a["h"]:.0f} L {x1:.0f} {y} '
-                f'L {x2:.0f} {y} L {x2:.0f} {b["y"] + b["h"]:.0f}" '
-                f'fill="none" stroke="#5f6368" stroke-width="1.5"'
+                f'<path d="M {x1:.0f} {a["y"] + a["h"]:.0f} L {x1:.0f} {back_y} '
+                f'L {x2:.0f} {back_y} L {x2:.0f} {b["y"] + b["h"]:.0f}" '
+                f'fill="none" stroke="{DIM}" stroke-width="1.5"'
                 f'{dashed} marker-end="url(#arrow)"/>'
             )
+            # A back edge's label belongs on the route it actually takes. Using
+            # the straight-line midpoint put it in the middle of the diagram,
+            # where — for a pair of nodes joined in both directions — it landed
+            # on top of the forward edge's label and rendered as two strings of
+            # overlapping glyphs.
+            anchor = ((x1 + x2) / 2, back_y + 14)
         else:
             x1, y1 = a["x"] + a["w"], a["y"] + a["h"] / 2
             x2, y2 = b["x"], b["y"] + b["h"] / 2
             parts.append(
                 f'<line x1="{x1:.0f}" y1="{y1:.0f}" x2="{x2:.0f}" y2="{y2:.0f}" '
-                f'stroke="#5f6368" stroke-width="1.5"{dashed} '
+                f'stroke="{DIM}" stroke-width="1.5"{dashed} '
                 f'marker-end="url(#arrow)"/>'
             )
+            anchor = ((x1 + x2) / 2, (y1 + y2) / 2 - 5)
+
         if edge.get("label"):
-            mx = (a["x"] + a["w"] + b["x"]) / 2
-            my = (a["y"] + a["h"] / 2 + b["y"] + b["h"] / 2) / 2 - 5
-            parts.append(
-                f'<text x="{mx:.0f}" y="{my:.0f}" text-anchor="middle" '
-                f'class="edgelabel">{inline(edge["label"])}</text>'
-            )
+            pending_labels.append({"text": edge["label"], "x": anchor[0], "y": anchor[1]})
+
+    label_warnings = _place_labels(pending_labels, list(boxes.values()), height)
+
+    for lab in pending_labels:
+        parts.append(
+            f'<text x="{lab["x"]:.0f}" y="{lab["y"]:.0f}" text-anchor="middle" '
+            f'class="edgelabel">{inline(lab["text"])}</text>'
+        )
 
     for box in boxes.values():
         fill, stroke = ROLES[box["role"]]
@@ -388,28 +556,36 @@ def build_diagram(diagram: dict) -> tuple:
             text_y += 12
 
     parts.append("</svg>")
-    return "\n".join(parts), problems
+    return "\n".join(parts), problems, label_warnings
 
 
 # -------------------------------------------------------------------- HTML
 
 CSS = """
-:root{--ink:#1f1f1f;--dim:#5f6368;--rule:#e0e0e0;--bg:#fff;--panel:#f8f9fa}
+/* Light only, on brand. Not theme-aware: two analysts discussing one report
+   should see the same thing, and this gets printed and attached to tickets.
+   Fonts name the brand's web faces first -- they are used where installed --
+   then Arial, which is the brand's own fallback choice, then system stacks.
+   No @font-face and no external request: the file must stay self-contained. */
+:root{color-scheme:only light;
+ --navy:#00294A;--green:#1D895E;--ink:#303435;--dim:#6E7477;
+ --rule:#BABBBC;--bg:#FFFFFF;--panel:#F4F6F7}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
- font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+ font:15px/1.55 "Roboto Flex",Roboto,Arial,-apple-system,BlinkMacSystemFont,sans-serif}
 .wrap{max-width:900px;margin:0 auto;padding:28px 20px 64px}
+h1,h2{font-family:Montserrat,"Roboto Flex",Arial,sans-serif;color:var(--navy)}
 h1{font-size:26px;margin:0 0 2px}
-h2{font-size:17px;margin:34px 0 10px;padding-bottom:5px;border-bottom:1px solid var(--rule)}
+h2{font-size:17px;margin:34px 0 10px;padding-bottom:5px;border-bottom:2px solid var(--green)}
 .sub{color:var(--dim);font-size:13px;margin:0 0 4px}
 .prov{color:var(--dim);font-size:12px;margin:0 0 18px}
 .badge{display:inline-block;padding:3px 10px;border-radius:11px;color:#fff;
  font-size:12px;font-weight:600;letter-spacing:.02em}
-.answer{background:var(--panel);border-left:4px solid #1a56b0;padding:14px 16px;
+.answer{background:var(--panel);border-left:4px solid var(--navy);padding:14px 16px;
  margin:16px 0;font-size:16px}
-.action{background:#fff8e1;border-left:4px solid #8a5a00;padding:14px 16px;margin:16px 0}
+.action{background:#FAEEE7;border-left:4px solid #C95321;padding:14px 16px;margin:16px 0}
 .action strong{display:block;font-size:12px;text-transform:uppercase;
- letter-spacing:.05em;color:#8a5a00;margin-bottom:4px}
+ letter-spacing:.05em;color:#C95321;margin-bottom:4px}
 .stats{display:flex;flex-wrap:wrap;gap:12px;margin:18px 0}
 .stat{flex:1 1 180px;background:var(--panel);border:1px solid var(--rule);
  border-radius:7px;padding:12px 14px}
@@ -418,9 +594,12 @@ h2{font-size:17px;margin:34px 0 10px;padding-bottom:5px;border-bottom:1px solid 
 .stat i{display:block;font-size:12px;color:var(--dim);font-style:normal;margin-top:4px}
 .figure{overflow-x:auto;border:1px solid var(--rule);border-radius:7px;
  padding:12px;margin:14px 0;background:var(--bg)}
-.nodelabel{font:600 12px sans-serif;fill:#1f1f1f}
-.nodesub{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;fill:#5f6368}
-.edgelabel{font:11px sans-serif;fill:#5f6368}
+.nodelabel{font:600 12px Montserrat,Arial,sans-serif;fill:#303435}
+.nodesub{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;fill:#6E7477}
+/* paint-order puts a white stroke behind the glyphs, so a label that has to
+   sit near a connector stays readable instead of tangling with the line. */
+.edgelabel{font:11px Arial,sans-serif;fill:#6E7477;paint-order:stroke;
+ stroke:#FFFFFF;stroke-width:3px;stroke-linejoin:round}
 table{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0}
 th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--rule);
  vertical-align:top}
@@ -437,18 +616,21 @@ summary{cursor:pointer;font-weight:600}
 details p{margin:9px 0 0}
 .legend{font-size:12px;color:var(--dim);margin-top:26px;padding-top:12px;
  border-top:1px solid var(--rule)}
-.warn{background:#fff8e1;border:1px solid #8a5a00;border-radius:7px;
+.warn{background:#FAEEE7;border:1px solid #C95321;border-radius:7px;
  padding:11px 14px;margin:16px 0;font-size:13px}
-@media (prefers-color-scheme:dark){
- :root{--ink:#e8eaed;--dim:#9aa0a6;--rule:#3c4043;--bg:#1f2023;--panel:#282a2d}
- .answer{background:var(--panel)}
- .action{background:#332b12}
- .nodelabel{fill:#101010}
- .nodesub{fill:#404040}
- .edgelabel{fill:#9aa0a6}
- .warn{background:#332b12}
+/* No prefers-color-scheme block, on purpose. See the note at the top. */
+/* Collapsed <details> do not print their contents, and CSS cannot open them:
+   browsers do not hide that content with a display rule, so the usual
+   `details:not([open])>*` trick is inert. A reader who needs the whole thing
+   on paper has to expand the sections first. Stated here rather than papered
+   over with a rule that appears to work. */
+@media print{
+ .wrap{max-width:none}
+ details{break-inside:avoid}
+ h2{break-after:avoid}
+ tr{break-inside:avoid}
+ .figure{overflow:visible}
 }
-@media print{.wrap{max-width:none}details{break-inside:avoid}}
 """
 
 
@@ -484,9 +666,12 @@ def render(case: dict, warnings: list) -> str:
     code = verdict["code"] if isinstance(verdict, dict) else verdict
     colour = VERDICTS[code]
 
-    svg, problems = build_diagram(case.get("diagram") or {})
+    svg, problems, diagram_warnings = build_diagram(case.get("diagram") or {})
     if problems:
         raise CaseError("diagram geometry: " + "; ".join(problems))
+    # extend, not rebind: main() holds this same list and prints it to stderr,
+    # so a diagram warning has to reach the caller as well as the page.
+    warnings.extend(diagram_warnings)
 
     ident = " · ".join(
         str(x) for x in (
@@ -503,13 +688,90 @@ def render(case: dict, warnings: list) -> str:
         for s in (case.get("headline") or [])
     )
 
+    def _event_cell(i):
+        out = f'<strong>{inline(i.get("title"))}</strong>'
+        if i.get("detail"):
+            out += f'<br>{inline(i.get("detail"))}'
+        if i.get("also_seen_as"):
+            # One event recorded against both the host and the account is
+            # stronger evidence than two rows that merely look like
+            # corroboration. Saying so is the whole value of the field.
+            out += ('<br><em>Also recorded as '
+                    f'{inline(i["also_seen_as"])} — one event, seen from '
+                    'both sides.</em>')
+        return out
+
     timeline = _rows(case.get("timeline") or [], [
         ("", lambda i: f'<span class="t">{inline(i.get("time"))}</span>'),
-        ("", lambda i: (f'<strong>{inline(i.get("title"))}</strong>'
-                        + (f'<br>{inline(i.get("detail"))}' if i.get("detail") else ""))),
+        ("", _event_cell),
         ("", lambda i: inline(i.get("lane"))),
         ("", lambda i: f'<code>{inline(i.get("provenance"))}</code>' if i.get("provenance") else ""),
         ("", lambda i: _grade_tag(i.get("grade"))),
+    ])
+
+    def _identity_cell(i):
+        out = f'<strong>{inline(i.get("name"))}</strong>'
+        if i.get("id"):
+            out += f' <code>{inline(i["id"])}</code>'
+        if i.get("note"):
+            out += f'<br>{inline(i.get("note"))}'
+        return out
+
+    def _surfaces_cell(i):
+        surfaces = i.get("surfaces") or []
+        if not surfaces:
+            return ""
+        # The count is the finding. One credential on four control planes is
+        # the sentence a reader needs, and it reads better as a number than as
+        # something they have to count themselves.
+        listed = " ".join(f'<code>{inline(s)}</code>' for s in surfaces)
+        if len(surfaces) > 1:
+            return f'<strong>{len(surfaces)}</strong><br>{listed}'
+        return listed
+
+    def _identity_role(i):
+        role = i.get("role")
+        if not role:
+            return ""
+        label, colour = IDENTITY_ROLES[role]
+        return f'<span class="tag" style="background:{colour}">{label}</span>'
+
+    # Columns are dropped when no row has a value for them. An always-present
+    # column that is blank on every row reads as an unfinished report rather
+    # than as an absent attribute — the first reader of this format took the
+    # empty Privilege column for a defect, which it effectively was.
+    # An absent value shows an em dash rather than nothing at all. The
+    # distinction this format cares about everywhere else applies here too:
+    # a blank cell reads as "someone forgot", a dash reads as "not
+    # established", and only one of those is true.
+    NOT_ESTABLISHED = '<span style="color:var(--dim)" title="not established">—</span>'
+
+    _identity_columns = [
+        ("Credential", _identity_cell, lambda i: True),
+        ("Surfaces", lambda i: _surfaces_cell(i) or NOT_ESTABLISHED,
+         lambda i: i.get("surfaces")),
+        ("Privilege", lambda i: inline(i.get("privilege")) or NOT_ESTABLISHED,
+         lambda i: i.get("privilege")),
+        ("Home", lambda i: (f'<code>{inline(i["home"])}</code>' if i.get("home")
+                            else NOT_ESTABLISHED),
+         lambda i: i.get("home")),
+        ("Role", lambda i: _identity_role(i) or NOT_ESTABLISHED,
+         lambda i: i.get("role")),
+    ]
+    _ids = case.get("identities") or []
+    _live = [(h, fn) for h, fn, present in _identity_columns
+             if any(present(i) for i in _ids)]
+    identities = _rows(_ids, _live)
+    identity_head = "".join(f"<th>{html.escape(h)}</th>" for h, _ in _live)
+
+    persistence = _rows(case.get("persistence") or [], [
+        ("", lambda i: (f'<strong>{inline(i.get("mechanism"))}</strong>'
+                        + (f'<br><code>{inline(i.get("surface"))}</code>'
+                           if i.get("surface") else ""))),
+        ("", lambda i: ("<br>".join(f"— {inline(s)}" for s in (i.get("survives") or []))
+                        or "<em>nothing recorded</em>")),
+        ("", lambda i: inline(i.get("removal"))),
+        ("", lambda i: f'<code>{inline(i.get("provenance"))}</code>' if i.get("provenance") else ""),
     ])
 
     evidence = _rows(case.get("evidence") or [], [
@@ -544,13 +806,42 @@ def render(case: dict, warnings: list) -> str:
         f'<div class="action"><strong>Recommended next action</strong>'
         f'{inline(case["next_action"])}</div>',
         warn_block,
-        f'<div class="stats">{stats}</div>' if stats else "",
     ]
+
+    # Persistence sits directly under the action, before anything else,
+    # because it is the reason the action is what it is. On four of the six
+    # investigations that produced this format, "reset the password" was
+    # insufficient or actively wrong, and each time the report had to say so in
+    # prose the reader could skim. A column headed "survives" cannot be skimmed
+    # past in the same way.
+    if persistence:
+        body.append(_section("Persistence, and what it survives", (
+            "<table><tr><th>Mechanism</th><th>Survives</th>"
+            "<th>How to remove it</th><th>Provenance</th></tr>"
+            + persistence + "</table>"
+        )))
+
+    body.append(f'<div class="stats">{stats}</div>' if stats else "")
 
     # The diagram sits above the narrative on purpose: a reader who meets the
     # shape first spends the prose confirming it rather than assembling it.
+    # Both of these are structure, and both go above the narrative. The order
+    # between them was settled by a reader rather than by argument: with
+    # credentials first, the diagram fell below the fold and was reported
+    # missing. Diagram first — the topology is the frame — then the
+    # credentials that moved through it.
+    #
+    # The earlier miss is still worth recording: credentials were originally
+    # *below* the diagram under a heading reading "Identities", and the first
+    # person to read the report could not find them. A section a reader cannot
+    # locate is not in the report.
     if svg:
         body.append(_section("How these entities relate", f'<div class="figure">{svg}</div>'))
+
+    if identities:
+        body.append(_section("Credentials and their roles", (
+            f"<table><tr>{identity_head}</tr>" + identities + "</table>"
+        )))
 
     if case.get("composition"):
         body.append(_section("Why the composition matters", f"<p>{inline(case['composition'])}</p>"))
@@ -643,17 +934,23 @@ def main(argv=None) -> int:
     for warning in warnings:
         print(f"warning: {warning}", file=sys.stderr)
 
+    # len(page) counts characters; the file is UTF-8, so an em-dash is one
+    # character and three bytes. Reporting one as the other is a small lie, and
+    # a tool that is casually wrong about what it just did is hard to trust
+    # about anything else.
+    size = len(page.encode("utf-8"))
+
     if args.check:
         nodes = len((case.get("diagram") or {}).get("nodes") or [])
-        print(f"OK — {len(page)} bytes, {nodes} diagram nodes, "
+        print(f"OK — {size} bytes, {nodes} diagram nodes, "
               f"{len(case.get('timeline') or [])} timeline entries, "
               f"{len(warnings)} warnings")
         return 0
 
     out = Path(args.output) if args.output else Path(
         f"Investigation-Report-{slugify(case['entity']['name'])}.html")
-    out.write_text(page)
-    print(f"wrote {out} ({len(page)} bytes)")
+    out.write_text(page, encoding="utf-8")
+    print(f"wrote {out} ({size} bytes)")
     return 0
 
 
