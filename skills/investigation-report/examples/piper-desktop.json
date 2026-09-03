@@ -50,6 +50,39 @@
     ]
   },
 
+  "identities": [
+    { "name": "piper@corp.example.com", "role": "compromised", "home": "corp.example.com",
+      "surfaces": ["kerberos"],
+      "note": "The probable owner of this desktop. The account named on the remote service start against Deacon-desktop at 16:01 (19789) is `piper`." },
+    { "name": "popo@lab.tme.local", "role": "used", "home": "lab.tme.local",
+      "surfaces": ["kerberos"],
+      "note": "Last seen 15:57 on 28 August — the same minute as the first recon burst against the lab.tme.local forest." },
+    { "name": "fguillot181@archer.local", "role": "used", "home": "archer.local",
+      "surfaces": ["kerberos"],
+      "note": "Last seen 11:18 today, matching the live Kerberoasting against archer.local. A different credential and a different forest from the first phase." },
+    { "name": "17 archer.local service principals", "role": "targeted",
+      "home": "archer.local", "surfaces": ["kerberos"],
+      "privilege": "Medium (3)",
+      "note": "SQL, mail, VPN, VNC, Oracle, Hadoop, Solr and SAP service accounts, all issued `rc4_hmac` tickets (19867)." }
+  ],
+
+  "persistence": [
+    { "mechanism": "Weak-cipher Kerberos tickets for 17 service principals",
+      "surface": "kerberos", "provenance": "19867",
+      "survives": ["password reset of piper@corp.example.com",
+                   "isolating Piper-desktop",
+                   "any action taken on this host"],
+      "removal": "Rotate all 17 service account passwords. Cracking happens offline on the attacker's hardware and produces no telemetry, so there is nothing to watch for and no point waiting." },
+    { "mechanism": "Reverse-shell listener on Piper-desktop, port 4444",
+      "surface": "host", "provenance": "19794",
+      "survives": ["credential reset", "rotating the service accounts"],
+      "removal": "Isolate the host. This is a running process, not a credential, so no identity action touches it." },
+    { "mechanism": "Deacon-desktop operating as a second listener",
+      "surface": "host", "provenance": "port 4444 sweep",
+      "survives": ["containing Piper-desktop alone"],
+      "removal": "Isolate Deacon-desktop as well — two further hosts called back to it after it was compromised." }
+  ],
+
   "timeline": [
     { "time": "28 Aug 14:55", "title": "Meterpreter session over TLS", "lane": "C2", "provenance": "19765", "grade": "decisive",
       "detail": "Threat 90 / certainty 90 — the highest-scored detection here. To 172.217.23.129:443 with a self-signed certificate issued by `reilly.langosh.org`. 4.8 MB sent, 5.1 MB received." },

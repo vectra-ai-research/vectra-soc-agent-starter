@@ -62,8 +62,10 @@ comprehension failure observed in real use:
 |---|---|---|
 | One-sentence answer | `answer` | A reader who does not know what they are looking for finds nothing |
 | Recommended action | `next_action` | The report is read to decide something |
+| Persistence | `persistence` | Sits **directly under the action**, because it is the reason the action is what it is. "Reset the password" was insufficient or wrong in most of the six investigations behind this format |
 | Headline figures | `headline` | Three numbers survive a skim; paragraphs do not |
 | Relationship diagram | `diagram` | Prose describing a graph is the hardest thing to read; the shape goes **above** the narrative so the reader confirms it rather than assembling it |
+| Identities involved | `identities` | The credential is usually what the incident is *about*. One account on four control planes is a table row; as a sentence it gets skimmed |
 | Composition | `composition` | Individually low-scoring detections compose into a critical entity; the sequence is the signal |
 | Sequence | `timeline` | Graded, so the reader has permission not to read all of it |
 | What is established | `established` | Collapsed by default — progressive disclosure for a human, not just for a model |
@@ -72,6 +74,26 @@ comprehension failure observed in real use:
 | Open questions | `gaps` | Each with an outcome, so a gap is a worked task rather than a shrug |
 | What would settle the rest | `next_steps` | Hands the next analyst a starting point |
 | Evidence | `evidence` | The audit trail for every claim above |
+
+## Identity is a subject, not an attribute
+
+Fill `identities` on **every** report, not only when the entity is an account.
+The platform models hosts and accounts; an attack is usually one credential
+moving across surfaces. A report titled after a host describes the room the
+attack passed through.
+
+Per identity, record what the deep-dive workflow's identity-set step told you
+to read: the surface list from `account_type`, the privilege from
+`privilege_level` / `privilege_category`, the home from `probable_home`, and a
+role — `compromised`, `used`, `targeted` or `owner`.
+
+Then fill `persistence` with anything a credential reset would not remove, and
+say what each item survives. That block is what makes the recommended action
+correct rather than plausible.
+
+`also_seen_as` is for the case where one event was recorded twice — a host
+detection and an account detection sharing a timestamp are one observation from
+both sides, and worth more than two rows that look like agreement.
 
 ## Grading
 
@@ -130,6 +152,23 @@ cannot:
 
 ## Output
 
-`Investigation-Report-<entity>.html` in the working directory unless `-o` says
-otherwise. One file, no external references, no JavaScript, works offline,
-prints, and respects dark mode. Safe to attach to a ticket or email.
+**Always pass `-o` with an absolute path, and tell the operator the full path
+in your reply.**
+
+```bash
+python3 scripts/render_report.py case.json -o "$HOME/Investigation-Report-<entity>.html"
+```
+
+The default is the current working directory, which is the right default for
+someone running the script by hand and the wrong one for you. When a host runs
+this skill, the working directory is the host's, not the operator's terminal —
+so a report written to a relative path is a file the operator is told about and
+cannot find. Writing it to `$HOME` and naming the path is the difference
+between a deliverable and a dead end.
+
+Write the case file somewhere durable too, next to the report. It is the
+investigation in structured form: cheaper to re-render than to re-derive, and
+the thing to correct and re-run when a finding turns out to be wrong.
+
+One file, no external references, no JavaScript, works offline, prints, and
+respects dark mode. Safe to attach to a ticket or an email.

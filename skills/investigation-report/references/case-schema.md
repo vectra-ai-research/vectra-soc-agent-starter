@@ -61,13 +61,32 @@ correct. That is the one failure mode worth blocking at the schema level.
     ]
   },
 
+  "identities": [
+    { "name": "adam_admin@fictotech.com",
+      "id": 3575,
+      "surfaces": ["kerberos", "o365", "entra_principal", "aws"],
+      "privilege": "Low (2)",    // free text; quote the level and category
+      "home": "fictotech.com",   // probable_home, or the forest/tenant
+      "role": "compromised",     // compromised|used|targeted|owner
+      "note": "One credential, four control planes." }
+  ],
+
+  "persistence": [
+    { "mechanism": "OAuth application grant",
+      "surface": "entra_principal",
+      "provenance": "19839",
+      "survives": ["password reset", "session revocation"],
+      "removal": "Revoke the application grant in Entra ID." }
+  ],
+
   "timeline": [
     { "time": "28 Aug 16:05",    // any string; displayed as given
       "title": "Reverse shell back from Deacon-desktop",
       "lane": "Lateral movement",
       "provenance": "19794",     // detection id or tool name
       "detail": "Longer explanation.",
-      "grade": "decisive" }      // decisive|supporting|context|ambiguous
+      "grade": "decisive",       // decisive|supporting|context|ambiguous
+      "also_seen_as": "detection 19834 on account 3575" }
   ],
 
   "established":  [ { "claim": "...", "evidence": "..." } ],
@@ -125,6 +144,11 @@ Backslashes follow JSON rules, so a Windows path needs doubling twice —
   earlier hand-drawn report shipped with an identity banner sitting on top of a
   DCSync box, so the geometry is asserted rather than assumed
 
+- an identity `role` outside `compromised`, `used`, `targeted`, `owner`
+- `surfaces` or `survives` given as anything but a list. `surfaces` being a
+  list is the entire point of the field: one credential holding four control
+  planes is what makes an incident an identity incident
+
 **Warns** (renders, prints to stderr, and shows the warnings in the report
 itself so they cannot be missed):
 
@@ -132,6 +156,29 @@ itself so they cannot be missed):
 - an `answer` longer than about 90 words
 - no diagram node with `role: "subject"` — the reader cannot tell which entity
   the report is about
+- a `persistence` entry that does not say what it `survives` — that field is
+  what makes the section change the operator's action
+- an `entity.kind` of `account` with no `identities` block, which is almost
+  always an oversight: the subject of the report is a credential
+
+## Notes on the identity fields
+
+`identities` renders **above the narrative**, for the same reason the diagram
+does. "One account, four control planes" is a table row; as a sentence in a
+findings list it gets skimmed. The renderer shows the *count* of surfaces
+before listing them, because the count is usually the finding.
+
+`persistence` renders **immediately after the recommended action**, because it
+is the reason the action is what it is. Across the six investigations that
+produced this format, "reset the password" was insufficient or actively wrong
+most of the time — an OAuth grant, an access key minted for a different
+principal, and a set of Kerberoasted service principals all survive it. A
+column headed *Survives* cannot be skimmed past the way a sentence can.
+
+`also_seen_as` on a timeline row is for one event recorded twice. A host
+detection and an account detection sharing a timestamp and a description are a
+single observation seen from both sides — which is stronger evidence than two
+rows that merely look like corroboration, and only if the report says so.
 
 ## Verified behaviour
 
