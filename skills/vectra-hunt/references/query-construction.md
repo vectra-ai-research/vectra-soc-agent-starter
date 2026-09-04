@@ -27,8 +27,17 @@ WHERE dt >= DATE(FROM_ISO8601_TIMESTAMP('{start_time}'))
 
 **Day-level partitioning (Azure CP only):**
 ```sql
-WHERE dt > date_add('day', -{days_back}, current_date)
+WHERE dt > date_add('day', -{days_back}, now())
+  AND timestamp BETWEEN date_add('day', -{days_back}, now()) AND now()
 ```
+
+> **Never `current_date`.** The dialect has no `current_date` keyword: it is
+> rejected by the parser with `SYNTAX_ERROR`, "mismatched input
+> 'current_date'", before the query reaches a table. This block used to
+> document `current_date` and every Azure CP recipe copied it, so none of
+> them could run. Probed live 2026-09-04 (`azurecp-current-date-rejected`).
+> If you want the window truncated to midnight rather than to the current
+> time, the working idiom is `DATE(NOW())`, not `current_date`.
 
 ---
 

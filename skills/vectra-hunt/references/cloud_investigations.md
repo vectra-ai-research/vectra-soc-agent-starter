@@ -297,7 +297,40 @@ ORDER BY timestamp DESC LIMIT {limit}
 
 ## Azure Control Plane — `azurecp.operations._all`
 
-**Important:** Day-level dt (use date_add('day', -N, current_date)). identity/properties are JSON blobs. resulttype: Success/Failure/Start (not "Failed").
+**Important:** Day-level dt — use `date_add('day', -N, now())`. **Not
+`current_date`**, which the parser rejects outright (`SYNTAX_ERROR`,
+"mismatched input 'current_date'"); this note previously said `current_date`
+and all five recipes below copied it, so none of them ran. Verified live
+2026-09-04 against `azurecp.operations._all` with data returned.
+identity/properties are JSON blobs.
+
+**`resulttype` is not a three-value enum.** Thirteen distinct values were
+observed in a single 7-day window (2026-09-04, `azurecp.operations._all`):
+
+| Value | Rows | | Value | Rows |
+|---|---|---|---|---|
+| `Success` | 98,710 | | `Resolved` | 1,445 |
+| `Updated` | 4,791 | | `In Progress` | 421 |
+| `Start` | 3,108 | | `Failure` | 75 |
+| `Accept` | 1,752 | | `Started` | 59 |
+| `Unknown` | 1,602 | | `Failed` | 58 |
+| `Active` | 1,491 | | `Succeeded` | 4 |
+| | | | `Accepted` | 1 |
+
+**`Failed` and `Failure` are both present and distinct**, as are
+`Start`/`Started` and `Success`/`Succeeded` — Azure emits different vocabulary
+per resource provider. An earlier version of this note claimed the values were
+"Success/Failure/Start (not Failed)", which is wrong in both directions, and
+the failure recipe below filtered on `Failed` alone and so returned 58 of 133
+actual failures without erroring. **Always match failures as a set:**
+
+```sql
+AND resulttype IN ('Failed', 'Failure')
+```
+
+Treat the table above as observed-here, not as the complete domain: a provider
+this tenant does not use may emit another spelling. Prefer an `IN` list or a
+`NOT IN ('Success', 'Succeeded')` complement over equality on one value.
 
 ### 1. Actor Azure Operations
 ```sql
@@ -305,7 +338,8 @@ SELECT timestamp, operationname, actor.name, actor.objectid,
        resulttype, calleripaddress, resourceid,
        rolename, rolescope, applicationname
 FROM azurecp.operations._all
-WHERE dt > date_add('day', -{days_back}, current_date)
+WHERE dt > date_add('day', -{days_back}, now())
+  AND timestamp BETWEEN date_add('day', -{days_back}, now()) AND now()
   AND (LOWER(actor.name) LIKE LOWER('%{actor}%')
        OR LOWER(actor.objectid) LIKE LOWER('%{actor}%'))
 ORDER BY timestamp DESC LIMIT {limit}
@@ -316,8 +350,9 @@ ORDER BY timestamp DESC LIMIT {limit}
 SELECT timestamp, operationname, actor.name, actor.objectid,
        resulttype, calleripaddress, resourceid, applicationname
 FROM azurecp.operations._all
-WHERE dt > date_add('day', -{days_back}, current_date)
-  AND resulttype = 'Failed'
+WHERE dt > date_add('day', -{days_back}, now())
+  AND timestamp BETWEEN date_add('day', -{days_back}, now()) AND now()
+  AND resulttype IN ('Failed', 'Failure')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
 
@@ -333,7 +368,8 @@ SELECT timestamp, operationname, actor.name, actor.objectid,
        resulttype, calleripaddress, resourceid,
        rolename, rolescope, applicationname
 FROM azurecp.operations._all
-WHERE dt > date_add('day', -{days_back}, current_date)
+WHERE dt > date_add('day', -{days_back}, now())
+  AND timestamp BETWEEN date_add('day', -{days_back}, now()) AND now()
   AND LOWER(operationname) LIKE LOWER('%{operation}%')
 ORDER BY timestamp DESC LIMIT {limit}
 ```
@@ -344,7 +380,8 @@ SELECT timestamp, operationname, actor.name, actor.objectid,
        resulttype, calleripaddress, resourceid,
        rolename, rolescope, applicationname
 FROM azurecp.operations._all
-WHERE dt > date_add('day', -{days_back}, current_date)
+WHERE dt > date_add('day', -{days_back}, now())
+  AND timestamp BETWEEN date_add('day', -{days_back}, now()) AND now()
   AND calleripaddress = '{src_ip}'
 ORDER BY timestamp DESC LIMIT {limit}
 ```
@@ -355,7 +392,8 @@ SELECT timestamp, operationname, actor.name, actor.objectid,
        resulttype, calleripaddress, resourceid,
        rolename, rolescope, applicationname
 FROM azurecp.operations._all
-WHERE dt > date_add('day', -{days_back}, current_date)
+WHERE dt > date_add('day', -{days_back}, now())
+  AND timestamp BETWEEN date_add('day', -{days_back}, now()) AND now()
   AND (LOWER(operationname) LIKE '%roleassignments/write%'
        OR LOWER(operationname) LIKE '%roleassignments/delete%')
 ORDER BY timestamp DESC LIMIT {limit}
