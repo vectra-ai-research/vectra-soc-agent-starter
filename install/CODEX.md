@@ -44,8 +44,21 @@ This puts both `vectra-ai-mcp-server` (the server) and `vectra-mcp` (the
 profile CLI) on `PATH`. External users install the published package instead:
 `uv tool install vectra-ai-mcp-server`.
 
-Update later with `uv tool upgrade vectra-ai-mcp-server` — it re-resolves the
-branch even when the version number hasn't changed.
+Update later with:
+
+```bash
+sh scripts/update-internal.sh
+```
+
+**Not `uv tool upgrade`.** uv caches the resolved git commit, so a moved
+branch reports *"Nothing to upgrade"* — and `--reinstall` does not help
+either, despite implying `--refresh`. Only the full
+`uv tool install --force --refresh --from git+…@internal` form re-resolves the
+head, which is what the script runs. Verified 2026-09-08.
+
+Expect the version string to stay the same across updates: an internal release
+does not bump `version`. The commit hash printed by `uv tool install` is the
+thing to check.
 
 ## 3. Store your Vectra credentials
 
