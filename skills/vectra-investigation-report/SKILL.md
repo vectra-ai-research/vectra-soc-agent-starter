@@ -48,6 +48,24 @@ and silently lacks its checks — no diagram geometry validation, no escaping
 guarantees, no gap-outcome vocabulary — which is worse than no report, because
 it is indistinguishable from one that was checked.
 
+**And do not speculate about why it is missing.** Say exactly this much: the
+`render_investigation_report` tool is not available in this client, so here is
+the case file instead. Then name the likely fix — *the connected Vectra MCP
+server predates the renderer, so check which server this client is using* —
+and stop.
+
+This is not hypothetical caution. Asked for a report against a client whose
+connected server was an older build, an agent reported *"the dedicated HTML
+report renderer isn't installed in this environment (no network access to
+fetch it)"*. It correctly refused to fake the HTML and correctly produced the
+case file — and then invented a cause. Nothing is fetched: the renderer is a
+tool on the server, and network access has nothing to do with it. The operator
+was sent to look at their network instead of at their connector list.
+
+A wrong diagnosis is more expensive than no diagnosis, because it is
+actionable. If you cannot see the tool, the only thing you know is that you
+cannot see the tool.
+
 ## Non-negotiables
 
 **Record the tenant.** `tenant.label` is required and the renderer refuses
@@ -174,6 +192,21 @@ deliverable. Do not paraphrase it or reconstruct it from the entity name.
 
 One file, no external references, no JavaScript, light-only on the Vectra
 palette. It opens offline, prints, and can be attached to a ticket as-is.
+
+**Quoting the path matters more than it sounds.** By default reports land in
+the system temp directory, which on macOS is an opaque per-user path under
+`/var/folders/<hash>/T/vectra-reports/`. An operator who has just watched an
+investigation run will look in the obvious places — the repo, `reports/`, their
+Desktop — find nothing, and conclude the render failed. It did not; they were
+looking somewhere reasonable and wrong. The result also carries
+`report_dir_source`, which says whether the location came from
+`VECTRA_REPORT_DIR` or the temp-directory default; mention it if the operator
+seems to be hunting.
+
+An operator who wants reports somewhere findable sets `VECTRA_REPORT_DIR` in
+the server's environment. You cannot set it — it is read at call time from the
+process environment, and changing it needs a client restart — so if asked,
+tell them where to put it rather than trying.
 
 If the server runs in a container the path is inside the container. Say so
 rather than leaving the operator hunting for a file that is not on their disk.

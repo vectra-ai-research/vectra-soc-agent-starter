@@ -80,7 +80,7 @@ Then add two settings to the entry in `~/.codex/config.toml`:
 command = "vectra-ai-mcp-server"
 
 # Prompt only for tools that change tenant state. Uses each tool's read-only
-# annotation, so the 32 read-only tools run uninterrupted and the 8 mutating
+# annotation, so the 33 read-only tools run uninterrupted and the 8 mutating
 # ones ask first. Do NOT use "approve" — that auto-approves close_detections
 # and mark_detection_fixed along with everything else.
 default_tools_approval_mode = "writes"
@@ -112,9 +112,28 @@ Triage, hunting, investigation and reporting all still work.
 
 ## 5. Make the skills discoverable
 
-Pattern B — **nothing to do**. `AGENTS.md` is already at the repo root and
-references each skill by relative path (`skills/<name>/SKILL.md`). Codex reads
-them on demand.
+Pattern B — **nothing to do for prose invocation**. `AGENTS.md` is already at
+the repo root and references each skill by relative path
+(`skills/<name>/SKILL.md`). Codex reads them on demand, so describing a task
+in prose reaches the right workflow.
+
+**There are no `/vectra-…` slash commands in Codex.** Those come from
+`plugin/commands/*.md`, which is a Claude Code convention; Codex does not read
+that directory and returns *"Unrecognized command"*. Codex's own `/` list is
+its built-ins plus installed skills and custom prompts.
+
+For `$`-mention invocation — Codex's equivalent of ChatGPT's `@`, and the
+nearest thing to the Claude slash commands — install the skills into the Codex
+skills directory:
+
+```bash
+python3 scripts/bundle_openai_skills.py --install
+```
+
+That regenerates `dist/openai-skills/` from the current tree and copies each
+skill into `~/.agents/skills/`. Restart Codex and `$vectra-investigator`,
+`$vectra-hunt` and the rest resolve by name, and appear in the `/` list.
+Re-run it after a `git pull`, since it is a copy rather than a link.
 
 ## 6. Launch and sanity-check
 
