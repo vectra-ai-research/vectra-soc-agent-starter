@@ -96,6 +96,8 @@ comprehension failure observed in real use:
 |---|---|---|
 | One-sentence answer | `answer` | A reader who does not know what they are looking for finds nothing |
 | Recommended action | `next_action` | The report is read to decide something |
+| How the verdict was reached | `decisions` | An analyst can otherwise reject only the whole verdict. Node IDs give disagreement an address — *"D4 is wrong"* survives into a ticket. Sits **above** the narrative because a reviewer's first question is not "what happened in what order" but "how did you conclude that" |
+| Which workflow rules were followed | `coverage` | Two reasoning layers will not reason alike. Requiring both to report against the same seven rule IDs makes the difference in thoroughness **visible** instead of invisible — and a skipped rule becomes a row, not a silence |
 | Persistence | `persistence` | Sits **directly under the action**, because it is the reason the action is what it is. "Reset the password" was insufficient or wrong in most of the six investigations behind this format |
 | Headline figures | `headline` | Three numbers survive a skim; paragraphs do not |
 | Relationship diagram | `diagram` | Prose describing a graph is the hardest thing to read; the shape goes **above** the narrative so the reader confirms it rather than assembling it |
@@ -128,6 +130,47 @@ correct rather than plausible.
 `also_seen_as` is for the case where one event was recorded twice — a host
 detection and an account detection sharing a timestamp are one observation from
 both sides, and worth more than two rows that look like agreement.
+
+## The decision tree is the argument
+
+`decisions` is the section that turns the report from a conclusion into
+something reviewable. Write it on every report. Contract:
+[`references/case-schema.md`](references/case-schema.md).
+
+One node per **judgement** — not per fact. "The tunnel is real C2 rather than a
+sanctioned one" is a judgement. "121 sessions were observed" is a fact and
+belongs in `evidence`.
+
+Every node must say **what would overturn it** (`would_change_if`), and the
+renderer refuses the case file without it. That field is the whole point:
+
+- It converts *"I disagree"* into *"go and check this specific thing."*
+- It is the honest test of whether you reasoned or assumed. If you cannot name
+  a falsifier, you did not make a judgement.
+- Written honestly it is also the most useful part of an *"I don't know"*.
+  **D0 — how did the intrusion begin? Not established. Would change if EDR
+  shows a process writing to disk after contact with either candidate.** That
+  narrows the analyst's next step to two names and tells them which system
+  holds the answer.
+
+**Mark the load-bearing nodes and mean it.** Same discipline as evidence
+grading — if most of the tree is load-bearing, the grading tells a reader
+nothing, and the renderer warns above four. A `load_bearing` node at `low`
+confidence warns too: that combination says the verdict rests on something
+soft, which belongs in front of the reader rather than in a footnote.
+
+**Say which field a conclusion rests on, not just which tool.** A judgement
+about endpoint coverage citing `sensor_name` is wrong however confidently it is
+written, because that field is a Vectra network sensor's operator-chosen label;
+one citing `edrs` can be checked in a second. Both readings have already been
+produced by real runs, and only the `rests_on` line distinguished them. See
+rule R7 in the deep-dive workflow.
+
+**Tag nodes with `satisfies`** so the coverage table derives itself, and use
+`coverage` only to account for rules that produced no node. A rule with
+neither renders as *Not reported* — which is the point. A report that admits
+*"R2 — not run"* is more trustworthy than a better-researched one that stays
+quiet about what it skipped.
 
 ## Grading
 

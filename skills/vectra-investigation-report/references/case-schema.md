@@ -29,6 +29,93 @@ citing `account 3553` with no tenant recorded does not fail when read against
 the wrong tenant — it resolves to a different real account and reads as
 correct. That is the one failure mode worth blocking at the schema level.
 
+## Expected: `decisions` — the reviewable tree
+
+Not in the required list only because case files predate it, and omitting it
+warns rather than refuses. **Write it on every report.** It is the difference
+between a conclusion and an argument.
+
+The problem it solves: an analyst reading a report can reject the verdict, and
+nothing else. There is nowhere to say *"I disagree with the third step."*
+Node IDs give disagreement an address that survives into a ticket.
+
+```jsonc
+"decisions": [
+  {
+    "id": "D1",                          // unique; how a reviewer cites it
+    "question": "Is the Hidden HTTPS Tunnel real C2, or a sanctioned tunnel?",
+    "concluded": "Real C2",
+    "confidence": "high",                // high | moderate | low
+    "load_bearing": true,                // remove it and the verdict changes
+
+    "because": ["121 sessions to one external IP inside 2.5 hours",
+                "653 KB in against 29 KB out — asymmetry consistent with tasking"],
+    "rests_on": ["19768", "get_detection_history"],
+
+    "considered": [
+      { "alternative": "Sanctioned VPN or update service",
+        "rejected_because": "the domain has no corporate association and the destination is in no known vendor range" }
+    ],
+
+    "would_change_if": "The destination resolves into a sanctioned SaaS or CDN range, or IT confirms an approved tunnel",
+
+    "depends_on": [],                    // parent IDs — makes it a tree
+    "satisfies": ["R2"]                  // workflow rule IDs, for coverage
+  }
+]
+```
+
+**`would_change_if` is required on every node and refused if absent or blank.**
+A judgement whose author cannot name what would overturn it was not a
+judgement, it was an assumption. It is also what turns "I disagree" into "go
+and check this specific thing" — and it is the field an agent under time
+pressure drops first, which is exactly why it is enforced.
+
+| Refused | Warned |
+|---|---|
+| a node with no `id`, `question`, `concluded` or `would_change_if` | no node marked `load_bearing` — the report doesn't say what the verdict rests on |
+| a duplicate `id` — two judgements cannot answer to one name | more than four `load_bearing` — if most of the tree is load-bearing the grading says nothing |
+| `confidence` outside `high`/`moderate`/`low` | a `load_bearing` node at `low` confidence — the verdict rests on something soft, and that belongs in front of the reader |
+| `depends_on` naming an unknown node, or itself | a node with an empty `rests_on` — a judgement a reader cannot trace is an opinion |
+| a dependency **cycle** — a reviewer following `depends_on` must reach a start | no `decisions` block at all |
+| a `considered` entry with no `rejected_because` | |
+| `satisfies` naming something outside `R1`–`R7` | |
+| `because` / `rests_on` / `depends_on` / `satisfies` given as anything but a list | |
+
+Confidence is three values rather than a percentage on purpose: a model asked
+for a number will produce one, and it will mean nothing. The useful question a
+reviewer asks is *"should I spend my attention here"*, which has three answers.
+
+## Expected: `coverage` — which workflow rules ran
+
+The seven numbered rules in
+[`workflow-entity-deep-dive.md`](../../vectra-investigator/references/workflow-entity-deep-dive.md)
+are the ones that separate a thorough investigation from a shallow one. The
+report accounts for **every one**, because *"I followed the workflow"* is
+unverifiable and *"R3 not run"* is a fact a reviewing analyst can act on.
+
+The table is **derived**, not written twice: tag decision nodes with
+`satisfies`, and use `coverage` only for rules that produced no node — which
+is how a rule you deliberately skipped gets to say so.
+
+```jsonc
+"coverage": {
+  "R3": { "status": "done",    "detail": "1 of 1 negative findings has a control query" },
+  "R4": { "status": "partial", "detail": "3 gaps attempted, 0 closed" },
+  "R2": "not run"                        // a bare string is accepted
+}
+```
+
+`status` is `done`, `partial`, `not run` or `n/a`. A rule with neither a
+`satisfies` tag nor a `coverage` entry renders as **Not reported** — a visible
+row rather than an absence nobody notices. That distinction is the entire
+reason the table exists: silence is otherwise indistinguishable from a rule
+that ran and found nothing.
+
+**A rule you did not run is reported, not omitted.** A report saying
+*"R2 — not run"* is more trustworthy than a better-researched one that stays
+quiet about what it skipped.
+
 ## Optional
 
 ```jsonc
