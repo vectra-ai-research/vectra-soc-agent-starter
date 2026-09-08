@@ -166,11 +166,39 @@ one citing `edrs` can be checked in a second. Both readings have already been
 produced by real runs, and only the `rests_on` line distinguished them. See
 rule R7 in the deep-dive workflow.
 
-**Tag nodes with `satisfies`** so the coverage table derives itself, and use
-`coverage` only to account for rules that produced no node. A rule with
-neither renders as *Not reported* — which is the point. A report that admits
-*"R2 — not run"* is more trustworthy than a better-researched one that stays
-quiet about what it skipped.
+## Every rule gets accounted for. This is not optional.
+
+`satisfies` is **not a nicety**. Every node that acted on a workflow rule must
+name it, and every rule that produced no node must appear in `coverage`. All
+seven, every report.
+
+The reason is not tidiness. **An undeclared rule is indistinguishable from a
+skipped one.** A report whose coverage table is entirely *Not reported* tells a
+reader "this investigation followed none of the rules" — and if you actually
+ran the control query and simply did not say so, the report has libelled your
+own work. That has already happened: a real run produced populated `sweep` and
+`ruled_out` sections while claiming no rules at all, and the table understated
+it across the board.
+
+So:
+
+| Situation | What to write |
+|---|---|
+| A decision acted on a rule | `"satisfies": ["R3"]` on that node |
+| A rule ran but produced no decision | `"coverage": {"R6": {"status": "done", "detail": "…"}}` |
+| A rule was **not** run | `"coverage": {"R2": {"status": "not run", "detail": "why"}}` |
+| A rule does not apply to this entity | `"coverage": {"R5": {"status": "n/a", "detail": "why"}}` |
+
+The renderer warns when nothing is accounted for, and warns again when fewer
+than three of seven are. Those warnings print into the report itself, where the
+customer reads them.
+
+**`not run` is a good answer.** A report that says *"R2 — not run"* is more
+trustworthy than a better-researched one that stays quiet about what it
+skipped, because the first can be acted on and the second cannot be
+distinguished from thoroughness. Partial is a good answer too — *"R3 —
+partial, 1 of 3 no-data findings has a control query"* is worth more than
+`done` would have been.
 
 ## Grading
 
