@@ -65,22 +65,60 @@ Node IDs give disagreement an address that survives into a ticket.
 ]
 ```
 
-**`would_change_if` is required on every node and refused if absent or blank.**
-A judgement whose author cannot name what would overturn it was not a
-judgement, it was an assumption. It is also what turns "I disagree" into "go
-and check this specific thing" — and it is the field an agent under time
-pressure drops first, which is exactly why it is enforced.
+### The floor
 
-| Refused | Warned |
+Four things are **refused**, not warned. Together they are the minimum a
+report has to clear before it can be written at all.
+
+| # | Requirement | Because |
+|---|---|---|
+| 1 | `would_change_if` on **every** node, non-blank | A judgement whose author cannot name what would overturn it was an assumption. It is also what turns "I disagree" into "go and check this specific thing" |
+| 2 | `rests_on` non-empty on **every** node | A judgement a reader cannot trace to a detection or a tool call is an opinion |
+| 3 | At least one node marked `load_bearing` | Otherwise the verdict never says what it rests on, which is the first thing a reviewer needs |
+| 4 | **Every** rule `R1`–`R7` carrying a status | An undeclared rule is indistinguishable from a skipped one |
+
+**Why these are refusals and not advice.** One entity, two reasoning layers,
+identical prompt. One layer produced a two-node tree and satisfied
+`would_change_if` on 2 of 2 nodes — the only field that was refused — and 0 of
+2 on `rests_on`, `load_bearing` and `satisfies`, all of which merely warned.
+
+> **Refusals get complied with. Warnings get ignored.**
+
+That is not a criticism of a model. A refusal blocks the task, so the agent
+fixes the named field and calls again; advisory text costs nothing to skip. It
+does mean a *guarantee* has to be a refusal. A customer picks their own
+reasoning layer, and two customers on two layers must not get reports of
+incomparable quality — so the minimum is enforced in the server, where no
+reasoning layer can negotiate with it.
+
+Each refusal names one thing to fix and fixing it advances to the next, so the
+repair loop converges: four named fixes take a bare node to a renderable one.
+
+**None of this requires the investigation to be good.** Depth of insight stays
+variable across layers and no schema changes that. The floor guarantees
+something narrower and still worth having: every report is decomposed,
+traceable, and explicit about its own gaps.
+
+### Also refused (structural)
+
+| Refused | Because |
 |---|---|
-| a node with no `id`, `question`, `concluded` or `would_change_if` | no node marked `load_bearing` — the report doesn't say what the verdict rests on |
-| a duplicate `id` — two judgements cannot answer to one name | more than four `load_bearing` — if most of the tree is load-bearing the grading says nothing |
-| `confidence` outside `high`/`moderate`/`low` | a `load_bearing` node at `low` confidence — the verdict rests on something soft, and that belongs in front of the reader |
-| `depends_on` naming an unknown node, or itself | a node with an empty `rests_on` — a judgement a reader cannot trace is an opinion |
-| a dependency **cycle** — a reviewer following `depends_on` must reach a start | no `decisions` block at all |
-| a `considered` entry with no `rejected_because` | |
+| a node with no `id`, `question` or `concluded` | |
+| a duplicate `id` | two judgements cannot answer to one name |
+| `confidence` outside `high`/`moderate`/`low` | |
+| `depends_on` naming an unknown node, or itself | |
+| a dependency **cycle** | a reviewer following `depends_on` must reach a start |
+| a `considered` entry with no `rejected_because` | an alternative with no rejection reason is decoration |
 | `satisfies` naming something outside `R1`–`R7` | |
 | `because` / `rests_on` / `depends_on` / `satisfies` given as anything but a list | |
+
+### Warned
+
+| Warned | Because |
+|---|---|
+| more than four `load_bearing` nodes | if most of the tree is load-bearing the grading says nothing |
+| a `load_bearing` node at `low` confidence | the verdict rests on something soft, and that belongs in front of the reader |
+| no `decisions` block at all | every pre-tree case file still renders — but a report with no tree states a verdict without showing the judgements behind it |
 
 Confidence is three values rather than a percentage on purpose: a model asked
 for a number will produce one, and it will mean nothing. The useful question a
@@ -106,11 +144,14 @@ is how a rule you deliberately skipped gets to say so.
 }
 ```
 
-`status` is `done`, `partial`, `not run` or `n/a`. A rule with neither a
-`satisfies` tag nor a `coverage` entry renders as **Not reported** — a visible
-row rather than an absence nobody notices. That distinction is the entire
-reason the table exists: silence is otherwise indistinguishable from a rule
-that ran and found nothing.
+`status` is `done`, `partial`, `not run` or `n/a`. **A rule with neither a
+`satisfies` tag nor a `coverage` entry is refused** — the case file will not
+render until every rule carries one. `not run` and `n/a` are perfectly good
+answers; silence is not, because silence is indistinguishable from a rule that
+ran and found nothing.
+
+An explicit `coverage` entry outranks a `satisfies` tag for the same rule, so
+use `coverage` to correct or qualify what the tags imply.
 
 **A rule you did not run is reported, not omitted.** A report saying
 *"R2 — not run"* is more trustworthy than a better-researched one that stays
