@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Lint the Investigation Query SQL embedded in the hunt/investigator recipes.
 
-The recipe library is ~2,400 lines of SQL that nothing executes and nothing
-checked. A single wrong idiom propagated to 59 call sites before anyone ran one
+The recipe library is 107 query recipes (826 lines of SQL) that nothing
+executes and, before this, nothing checked. A single wrong idiom propagated to 59 call sites before anyone ran one
 of the affected recipes: `query-construction.md` documented
 `CONTAINS(LOWER(field), LOWER('value'))` as the substring filter, but Trino's
 `contains()` only accepts `(array, element)` or `(cidr, ipaddress)` — so every

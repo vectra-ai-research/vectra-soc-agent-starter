@@ -66,9 +66,9 @@ The server is a **separate project** maintained by Vectra at
 it here — we just register it in each agent host's config so the host can
 launch it on demand.
 
-### Minimum server version — **0.4.0**
+### Minimum server version — **1.0.1**
 
-> The version number below assumes 0.4.0 is the next server release. If it ships
+> The version number below assumes 1.0.1 is the next server release. If it ships
 > under a different number, correct this section — the requirement is real
 > regardless of what it ends up being called.
 
@@ -105,7 +105,7 @@ uvx --from git+https://github.com/vectra-ai-research/vectra-ai-mcp-server vectra
 **Pin a version in production**, appending `@<version>`:
 
 ```bash
-uvx vectra-ai-mcp-server@0.4.0
+uvx vectra-ai-mcp-server@1.0.1
 ```
 
 Pin at or above the minimum above. Pinning lower gets you a stable server and

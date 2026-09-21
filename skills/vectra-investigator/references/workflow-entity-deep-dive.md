@@ -329,7 +329,7 @@ Observed on `O365:virginia-choi-02` on 2026-09-02: a query for SharePoint file
 downloads in the compromise window returned zero rows. Written up as-is, that
 becomes "no files were exfiltrated" — the sentence the operator most wants to
 read, and it would have been false. The control query showed
-`office365.sharepoint` holds **two rows for the entire tenant across all
+`m365.sharepoint` holds **two rows for the entire tenant across all
 time**. The table is barely populated. The correct finding was not "nothing was
 taken" but "we have no visibility into what was taken", and it changed the
 recommended action from *monitor* to *rotate credentials and assume access*.
@@ -340,7 +340,7 @@ Re-run the same query against the same table with the entity predicate and the
 time window removed, and no filter but a `LIMIT`:
 
 ```sql
-SELECT count(*) AS rows_all_time FROM office365.sharepoint._all WHERE dt > date_add('day', -90, now()) LIMIT 1
+SELECT count(*) AS rows_all_time FROM m365.sharepoint._all WHERE dt > date_add('day', -90, now()) LIMIT 1
 ```
 
 Then read the result against three cases:
