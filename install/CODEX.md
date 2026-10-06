@@ -56,9 +56,15 @@ either, despite implying `--refresh`. Only the full
 `uv tool install --force --refresh --from git+…@internal` form re-resolves the
 head, which is what the script runs. Verified 2026-09-08.
 
-Expect the version string to stay the same across updates: an internal release
-does not bump `version`. The commit hash printed by `uv tool install` is the
-thing to check.
+The version string may or may not change across updates. Most internal
+updates land under the same version (`vectra-mcp --version` reads the same
+before and after); a release-candidate bump moves it, as `0.4.0-rc.1` became
+`1.0.1-rc.1`. Either way, the commit hash printed by `uv tool install` is the
+thing to check, not the version.
+
+If you still have `0.4.0-rc.1`, `vectra-mcp` does not exist yet, so the
+script's "server before:" line reads `not installed`. That is expected.
+The "server after:" line should read `1.0.1-rc.1`.
 
 ## 3. Store your Vectra credentials
 
